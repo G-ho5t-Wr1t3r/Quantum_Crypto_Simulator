@@ -1,0 +1,33 @@
+# Python 3.12
+#
+# In a conda environment:
+#   conda create -n qkd python=3.12
+#   conda activate qkd
+#   pip install -r requirements.txt
+#
+# Qiskit is pinned because the whole simulation depends on the 2.x primitives API.
+# The other packages are left to resolve so that pip can pick versions compatible
+# with it; once the environment works, freeze the exact versions with
+#   pip freeze > requirements.lock.txt
+# and commit that too, so the results stay reproducible.
+
+# Quantum core
+qiskit==2.3.1
+qiskit-aer          # density_matrix simulation and noise models
+
+# Numerics and plotting
+numpy
+matplotlib
+
+# Backend
+fastapi
+uvicorn[standard]   # 'standard' pulls in the websockets support needed for live streaming
+pydantic
+
+# Notebooks
+jupyterlab
+ipykernel
+
+# Tests
+pytest
+httpx               # required by fastapi's TestClient
