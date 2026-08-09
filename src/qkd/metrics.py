@@ -18,6 +18,7 @@ def _check_validity(sample: Bits) -> bool:
         return False
     return all(bit in (0, 1) for bit in sample)
 
+# BB84 =========
 
 def qber(alice_sample: Bits, bob_sample: Bits) -> float:
     """Quantum Bit Error Rate estimated on a revealed sample.
@@ -166,6 +167,7 @@ def key_rate(n_final: int, n_sent: int) -> float:
     else:
         return n_final / n_sent
 
+# E91 =========
 
 def correlator(alice_outcomes: Bits, bob_outcomes: Bits) -> float:
     """Correlation E between two sequences of paired measurement outcomes.
