@@ -103,14 +103,14 @@ def prepare(bit: int, basis: int) -> QuantumCircuit:
 
     match (bit, basis):
         case (0, 0):
-            pass                
+            pass
         case (1, 0):
             qc.x(0)
         case (0, 1):
             qc.h(0)
         case (1, 1):
-            qc.x(0)             
-            qc.h(0)             
+            qc.x(0)
+            qc.h(0)
     return qc
 
 
@@ -226,11 +226,11 @@ def run(n_bits: int, seed: int) -> BB84Run:
     # PHASE 4: Both hold a sifted key. They are not necessarily equal yet — establishing that
     # is what the QBER estimate is for.
     execution = BB84Run(
-        alice_bits=alice_bits, 
+        alice_bits=alice_bits,
         alice_bases=alice_bases,
         alice_sifted=alice_sifted,
         bob_bits=bob_bits,
         bob_bases=bob_bases,
-        bob_sifted=bob_sifted 
+        bob_sifted=bob_sifted
         )
     return execution
