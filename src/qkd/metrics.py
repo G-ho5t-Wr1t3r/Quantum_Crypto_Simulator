@@ -9,9 +9,8 @@ protocol's responsibility (see bb84.py / e91.py), because the notion of
 "matching bases" is protocol-specific.
 """
 
-from collections.abc import Sequence
+from qkd.types import Bits
 
-Bits = Sequence[int]
 
 def _check_validity(sample: Bits) -> bool:
     """Checks if the sample is valid (contains only 0 or 1)"""

@@ -59,3 +59,14 @@ class TestSiftingRatio:
         with pytest.raises(ValueError):
             sifting_ratio(101, 100)
 
+
+# ---------------------------------------------------------------------------
+# These functions are also exercised end to end against a real protocol run in
+# test_bb84.py: QBER exactly zero on an ideal channel, and the sifting ratio
+# holding near one half. Those tests belong there because they need a protocol.
+#
+# TODO(F5): once InterceptResend exists, assert that a fully intercepted BB84
+#   run yields QBER ~ 0.25, and that a partially intercepted one is linear in
+#   the intercepted fraction. Derive the tolerance from the binomial variance
+#   on the sifted length, as in test_bb84.py.
+# ---------------------------------------------------------------------------
