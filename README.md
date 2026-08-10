@@ -38,7 +38,7 @@ curves can be read in kilometres and not only in abstract units.
 
 ## Architecture
 
-![Layer diagram of the simulator](report/layer_diagram.png)
+![Layer diagram of the simulator](report/diagrams/layer_diagram_eng.png)
 
 Protocol, channel, attack and actor are four **independent** axes, not an inheritance hierarchy:
 any protocol can run over any channel, with or without an attacker. A plugin registry composes
@@ -119,7 +119,7 @@ leggere in chilometri e non solo in unità astratte.
 
 ## Architettura
 
-![Diagramma a livelli del simulatore](report/layer_diagram.png)
+![Diagramma a livelli del simulatore](report/diagrams/layer_diagram_it.png)
 
 Protocollo, canale, attacco e attore sono quattro assi **indipendenti**, non una gerarchia di
 ereditarietà: qualunque protocollo può girare su qualunque canale, con o senza attaccante. Un
