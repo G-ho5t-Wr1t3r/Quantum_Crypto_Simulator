@@ -83,7 +83,7 @@ works under the same license.
 
 ## Author
 
-Giovanni Lorenzo Murfuni — matr. 269318
+Giovanni Lorenzo Murfuni
 
 </details>
 
@@ -165,6 +165,6 @@ opere derivate sotto la stessa licenza.
 
 ## Autore
 
-Giovanni Lorenzo Murfuni — matr. 269318
+Giovanni Lorenzo Murfuni
 
 </details>
