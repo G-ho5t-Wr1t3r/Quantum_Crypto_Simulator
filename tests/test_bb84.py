@@ -66,17 +66,19 @@ class TestSift:
         alice_bases = [0, 0, 1, 1]
         bob_bits = [0, 1, 0, 0]
         bob_bases = [0, 1, 1, 0]  # positions 0 and 2 match
-        a, b = sift(alice_bits, alice_bases, bob_bits, bob_bases)
+        a, b, bases = sift(alice_bits, alice_bases, bob_bits, bob_bases)
         assert a == [0, 1]
         assert b == [0, 0]
+        assert bases == [0, 1]  # the bases those two survivors were read in
 
     def test_discards_on_basis_mismatch_even_when_bits_agree(self):
         # Position 0 has identical bits but different bases: it must still go.
         # Sifting is decided by the basis alone; comparing values here would
         # leak the key and destroy the meaning of the QBER computed afterwards.
-        a, b = sift([1], [0], [1], [1])
+        a, b, bases = sift([1], [0], [1], [1])
         assert a == []
         assert b == []
+        assert bases == []
 
     def test_length_mismatch_is_rejected(self):
         with pytest.raises(ValueError):

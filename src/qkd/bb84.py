@@ -25,12 +25,13 @@ import numpy as np
 from qiskit import QuantumCircuit
 from qiskit_aer import AerSimulator
 
+from qkd.channels import Channel, IdealChannel
 from qkd.types import Bases, Bits
 
 # One simulator for the whole module: constructing it is not free, and there is
 # no per-call state to isolate — reproducibility comes from seed_simulator,
 # passed explicitly at every run.
-_SIMULATOR = AerSimulator()
+_SIMULATOR = AerSimulator(method="density_matrix")
 
 
 @dataclass(frozen=True)
@@ -49,6 +50,22 @@ class BB84Run:
     bob_bits: Bits
     alice_sifted: Bits
     bob_sifted: Bits
+    # Which basis each surviving position was measured in. Needed because the
+    # QBER of an asymmetric channel depends on the basis, and E4 has to split
+    # the sifted key in two to show it.
+    sifted_bases: Bases
+
+    def sifted_in_basis(self, basis: int) -> tuple[Bits, Bits]:
+        """The subset of the sifted key measured in one given basis.
+
+        Amplitude damping produces QBER_Z = gamma/2 against
+        QBER_X = (1 - sqrt(1-gamma))/2, so a single pooled QBER averages away
+        the very asymmetry that identifies the channel. Splitting is what makes
+        the fingerprint visible.
+        """
+        alice = [b for b, s in zip(self.alice_sifted, self.sifted_bases) if s == basis]
+        bob = [b for b, s in zip(self.bob_sifted, self.sifted_bases) if s == basis]
+        return alice, bob
 
 
 def random_bits(n: int, rng: np.random.Generator) -> Bits:
@@ -159,7 +176,7 @@ def sift(
     alice_bases: Bases,
     bob_bits: Bits,
     bob_bases: Bases,
-) -> tuple[Bits, Bits]:
+) -> tuple[Bits, Bits, Bases]:
     """Keep the positions where Alice and Bob used the same basis.
 
     Discarding is decided by basis mismatch alone, never by whether the bits
@@ -167,8 +184,9 @@ def sift(
     meaning of the QBER computed afterwards.
 
     Returns:
-        Alice's and Bob's sifted keys, same length, same order, aligned index
-        by index.
+        Alice's and Bob's sifted keys plus the basis each surviving position was
+        measured in, all three aligned index by index. The bases come along
+        because an asymmetric channel gives a different QBER in each of them.
 
     Raises:
         ValueError: if the four inputs do not all have the same length.
@@ -176,16 +194,17 @@ def sift(
     if not (len(alice_bits) == len(alice_bases) == len(bob_bits) == len(bob_bases)):
         raise ValueError("All four sequences must have the same length")
 
-    sifted_alice, sifted_bob = [], []
+    sifted_alice, sifted_bob, sifted_bases = [], [], []
     for i in range(len(alice_bits)):
         if alice_bases[i] == bob_bases[i]:
             sifted_alice.append(alice_bits[i])
             sifted_bob.append(bob_bits[i])
-    return (sifted_alice, sifted_bob)
+            sifted_bases.append(alice_bases[i])
+    return (sifted_alice, sifted_bob, sifted_bases)
 
 
-def run(n_bits: int, seed: int) -> BB84Run:
-    """Execute one full ideal-channel run and return everything it produced.
+def run(n_bits: int, seed: int, channel: Channel | None = None) -> BB84Run:
+    """Execute one full run and return everything it produced.
 
     Seeding is explicit and required rather than optional: a run whose seed is
     not pinned cannot be reproduced, and every figure in the report has to be.
@@ -193,10 +212,16 @@ def run(n_bits: int, seed: int) -> BB84Run:
     Args:
         n_bits: how many qubits Alice transmits.
         seed: seed for the run's random stream.
+        channel: what the qubit goes through in transit. Defaults to the ideal
+            channel, so an omitted argument means a lossless line rather than
+            no line at all.
 
     Returns:
         The complete BB84Run.
     """
+    if channel is None:
+        channel = IdealChannel()
+
     # One generator for the whole run: Alice's bits, Alice's bases, Bob's bases and every
     # simulator seed are drawn from the same stream. Re-deriving a generator from `seed` at
     # each call would make those three sequences identical to one another, and a run in which
@@ -212,16 +237,19 @@ def run(n_bits: int, seed: int) -> BB84Run:
         alice_qubit = prepare(bit, base)
         alice_qubits.append(alice_qubit)
 
-    # PHASE 2: Bob receives Alice's qubits and measures each one in a basis he picks at random.
+    # PHASE 2: the qubits travel, then Bob measures each one in a basis he picks at random.
+    # The channel acts here and nowhere else: after Alice has prepared, before Bob reads. That
+    # ordering is the physical content of the model, not an implementation detail.
     bob_bases = random_bits(n_bits, rng)
     bob_bits = []
     for qubit, base in zip(alice_qubits, bob_bases):
-        bob_bit = measure(qubit, base, rng)
+        in_transit = channel.apply(qubit, 0)
+        bob_bit = measure(in_transit, base, rng)
         bob_bits.append(bob_bit)
 
     # PHASE 3: Only once Bob has measured everything may the bases be announced and the keys
     # sifted. Here the ordering is guaranteed by the sequential execution.
-    alice_sifted, bob_sifted = sift(alice_bits, alice_bases, bob_bits, bob_bases)
+    alice_sifted, bob_sifted, sifted_bases = sift(alice_bits, alice_bases, bob_bits, bob_bases)
 
     # PHASE 4: Both hold a sifted key. They are not necessarily equal yet — establishing that
     # is what the QBER estimate is for.
@@ -231,6 +259,7 @@ def run(n_bits: int, seed: int) -> BB84Run:
         alice_sifted=alice_sifted,
         bob_bits=bob_bits,
         bob_bases=bob_bases,
-        bob_sifted=bob_sifted
+        bob_sifted=bob_sifted,
+        sifted_bases=sifted_bases,
         )
     return execution

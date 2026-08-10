@@ -29,6 +29,7 @@ import numpy as np
 from qiskit import QuantumCircuit
 from qiskit_aer import AerSimulator
 
+from qkd.channels import Channel, IdealChannel
 from qkd.metrics import correlator
 from qkd.types import Bits
 
@@ -60,7 +61,7 @@ CHSH_SETTINGS = (
 # so roughly 2/9 of the pairs survive as key material — noticeably less
 # generous than BB84's one half.
 
-_SIMULATOR = AerSimulator()
+_SIMULATOR = AerSimulator(method="density_matrix")
 
 
 @dataclass(frozen=True)
@@ -241,7 +242,7 @@ def chsh_correlators(
 
 
 
-def run(n_pairs: int, seed: int) -> E91Run:
+def run(n_pairs: int, seed: int, channel: Channel | None = None) -> E91Run:
     """Emit n_pairs, measure them at random angles, and sift.
 
     Both parties draw their angle independently and uniformly for every pair, so
@@ -262,12 +263,21 @@ def run(n_pairs: int, seed: int) -> E91Run:
     Returns:
         The complete E91Run.
     """
+    if channel is None:
+        channel = IdealChannel()
+
     rng = np.random.default_rng(seed)
 
-    # PHASE 1: Generating Bell Pair
-    alice_angles = []
-    bob_angles = []
+    # PHASE 1: the source emits the pair and sends one particle to each party.
+    #
+    # MODELLING DECISION — the channel is applied to BOTH arms. In E91 the source sits between
+    # Alice and Bob and both particles travel to reach them, so both are exposed to the fibre.
+    # Damping only one arm would describe a different setup: a source co-located with one party.
+    # The asymmetric case is not lost, it is simply a different scenario — and it is precisely
+    # the one F6 builds, where Eve intercepts a single arm.
     bell_p = bell_pair()
+    bell_p = channel.apply(bell_p, 0)
+    bell_p = channel.apply(bell_p, 1)
 
     # PHASE 2: Alice & Bob need to choose random angle for measuring
     alice_idx = rng.integers(0, len(ALICE_ANGLES), size=n_pairs)
