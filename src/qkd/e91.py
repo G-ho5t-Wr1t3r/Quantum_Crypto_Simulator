@@ -29,6 +29,8 @@ import numpy as np
 from qiskit import QuantumCircuit
 from qiskit_aer import AerSimulator
 
+from qkd.actors import Actor
+from qkd.attacks import validate_placement
 from qkd.channels import Channel, IdealChannel
 from qkd.metrics import correlator
 from qkd.types import Bits
@@ -148,7 +150,9 @@ def measure_pair(
     sim_seed = int(rng.integers(0, 2**31))
     counts = _SIMULATOR.run(qc, shots=1, seed_simulator=sim_seed).result().get_counts()
 
-    bits = next(iter(counts))
+    # With several classical registers Qiskit separates them by spaces, most recently added
+    # first; an attack on one arm adds its own. The first field is the pair's own measurement.
+    bits = next(iter(counts)).split()[0]
     alice_bit = int(bits[1]) #less significant ---> Little Endian
     bob_bit = int(bits[0])
     return (alice_bit, bob_bit)
@@ -242,7 +246,12 @@ def chsh_correlators(
 
 
 
-def run(n_pairs: int, seed: int, channel: Channel | None = None) -> E91Run:
+def run(
+    n_pairs: int,
+    seed: int,
+    channel: Channel | None = None,
+    eavesdropper: Actor | None = None,
+) -> E91Run:
     """Emit n_pairs, measure them at random angles, and sift.
 
     Both parties draw their angle independently and uniformly for every pair, so
@@ -266,6 +275,10 @@ def run(n_pairs: int, seed: int, channel: Channel | None = None) -> E91Run:
     if channel is None:
         channel = IdealChannel()
 
+    attacks = list(eavesdropper.capabilities) if eavesdropper else []
+    for attack in attacks:
+        validate_placement(attack, eavesdropper.position)
+
     rng = np.random.default_rng(seed)
 
     # PHASE 1: the source emits the pair and sends one particle to each party.
@@ -278,6 +291,12 @@ def run(n_pairs: int, seed: int, channel: Channel | None = None) -> E91Run:
     bell_p = bell_pair()
     bell_p = channel.apply(bell_p, 0)
     bell_p = channel.apply(bell_p, 1)
+
+    # F6: Eve intercepts ONE arm. Attacking both would be a different scenario — two
+    # independent eavesdroppers — and the asymmetry is the point: breaking a single arm is
+    # already enough to destroy the entanglement the whole security argument rests on.
+    for attack in attacks:
+        bell_p = attack.intercept(bell_p, 0, rng)
 
     # PHASE 2: Alice & Bob need to choose random angle for measuring
     alice_idx = rng.integers(0, len(ALICE_ANGLES), size=n_pairs)

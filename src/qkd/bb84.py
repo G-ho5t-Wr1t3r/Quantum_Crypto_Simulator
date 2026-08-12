@@ -25,6 +25,8 @@ import numpy as np
 from qiskit import QuantumCircuit
 from qiskit_aer import AerSimulator
 
+from qkd.actors import Actor
+from qkd.attacks import validate_placement
 from qkd.channels import Channel, IdealChannel
 from qkd.types import Bases, Bits
 
@@ -167,8 +169,11 @@ def measure(circuit: QuantumCircuit, basis: int, rng: np.random.Generator) -> in
     # possible, Eve could do it too and BB84 would offer no security at all.
     # get_counts() returns a dict like {'bitstring': occurrences}.
 
-    # shots=1, so counts holds exactly one bitstring of length 1: convert the only key in the dict.
-    return int(next(iter(counts)))
+    # shots=1, so counts holds exactly one key. With several classical registers Qiskit
+    # separates them by spaces, most recently added first — and an attack in transit adds its
+    # own register to record what Eve read. Taking the first field keeps Bob's own measurement
+    # whether or not anyone else has been listening.
+    return int(next(iter(counts)).split()[0])
 
 
 def sift(
@@ -203,7 +208,12 @@ def sift(
     return (sifted_alice, sifted_bob, sifted_bases)
 
 
-def run(n_bits: int, seed: int, channel: Channel | None = None) -> BB84Run:
+def run(
+    n_bits: int,
+    seed: int,
+    channel: Channel | None = None,
+    eavesdropper: Actor | None = None,
+) -> BB84Run:
     """Execute one full run and return everything it produced.
 
     Seeding is explicit and required rather than optional: a run whose seed is
@@ -215,12 +225,24 @@ def run(n_bits: int, seed: int, channel: Channel | None = None) -> BB84Run:
         channel: what the qubit goes through in transit. Defaults to the ideal
             channel, so an omitted argument means a lossless line rather than
             no line at all.
+        eavesdropper: an actor whose capabilities are performed on every qubit
+            in transit. Its placement is validated before anything runs, so an
+            attack asked for from an impossible position fails loudly instead of
+            being silently ignored.
 
     Returns:
         The complete BB84Run.
+
+    Raises:
+        AttackNotAllowedError: if the eavesdropper holds an attack that cannot
+            be performed from where it stands.
     """
     if channel is None:
         channel = IdealChannel()
+
+    attacks = list(eavesdropper.capabilities) if eavesdropper else []
+    for attack in attacks:
+        validate_placement(attack, eavesdropper.position)
 
     # One generator for the whole run: Alice's bits, Alice's bases, Bob's bases and every
     # simulator seed are drawn from the same stream. Re-deriving a generator from `seed` at
@@ -244,6 +266,8 @@ def run(n_bits: int, seed: int, channel: Channel | None = None) -> BB84Run:
     bob_bits = []
     for qubit, base in zip(alice_qubits, bob_bases):
         in_transit = channel.apply(qubit, 0)
+        for attack in attacks:
+            in_transit = attack.intercept(in_transit, 0, rng)
         bob_bit = measure(in_transit, base, rng)
         bob_bits.append(bob_bit)
 
