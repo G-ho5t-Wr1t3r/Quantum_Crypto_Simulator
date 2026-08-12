@@ -292,7 +292,7 @@ def run(
     bell_p = channel.apply(bell_p, 0)
     bell_p = channel.apply(bell_p, 1)
 
-    # F6: Eve intercepts ONE arm. Attacking both would be a different scenario — two
+    # Eve intercepts ONE arm. Attacking both would be a different scenario — two
     # independent eavesdroppers — and the asymmetry is the point: breaking a single arm is
     # already enough to destroy the entanglement the whole security argument rests on.
     for attack in attacks:

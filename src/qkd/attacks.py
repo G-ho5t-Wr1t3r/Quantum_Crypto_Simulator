@@ -17,6 +17,21 @@ That asymmetry is the bridge to the Network Security chapter. QKD detects
 eavesdroppers on the line; it does not, and cannot, detect a participant who has
 been compromised. Making the framework *refuse* an attack in an invalid position
 states that limitation as a property of the model rather than a footnote.
+
+DESIGN DECISION — protocols take an actor, not an attack
+=========================================================
+`bb84.run` and `e91.run` accept an `eavesdropper: Actor`, whose capabilities are
+performed in transit, rather than an attack on its own.
+
+That is what makes the machinery of F1-F3 do real work: the position comes from
+the actor, the valid positions from the attack, and `validate_placement` joins
+the two. Passing an attack alone would leave the caller to supply a position out
+of thin air, and the threat model would stop meaning anything — an attack is not
+dangerous in the abstract, it is dangerous *from somewhere*.
+
+The check runs before the simulation starts, not lazily at the first qubit. The
+acceptance criterion asks that the framework PREVENT an attack in an impossible
+position, and preventing it after an hour of computation is not preventing it.
 """
 
 from abc import ABC, abstractmethod
@@ -155,7 +170,16 @@ class InterceptResend(Attack):
     into that basis, measure, rotate back. No reset and no conditional
     re-preparation are needed, because the collapse *is* the preparation — after
     the measurement the qubit already sits in the eigenstate matching the
-    outcome, which is exactly the state Eve would have built by hand.
+    outcome, which is exactly the state Eve would have built by hand. Shorter
+    than reconstructing it explicitly, and closer to what actually happens.
+
+    The measurement writes into a classical register of its own, which is what
+    Eve learns. Qiskit separates registers with a space in the keys returned by
+    get_counts, most recently added first, so both protocols read the first
+    field to recover their own measurement — with or without anyone listening.
+    Recording that register on the attacker's view is what the visualisation at
+    J4 will show as "what Eve knows"; the hook is in Actor.observe, the wiring
+    waits for the event schema at I3.
     """
 
     name = "intercept_resend"
