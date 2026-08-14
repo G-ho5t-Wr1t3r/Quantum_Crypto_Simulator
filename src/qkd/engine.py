@@ -37,7 +37,7 @@ from __future__ import annotations
 
 import statistics
 from collections.abc import Iterator
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 
 from qkd import bb84, e91
@@ -58,6 +58,7 @@ class EventKind(str, Enum):
     STARTED = "started"
     TRIAL = "trial"
     DONE = "done"
+    SWEEP_POINT = "sweep_point"
 
 
 @dataclass(frozen=True)
@@ -90,6 +91,18 @@ class TrialResult:
     chsh: float | None = None
     chsh_sigma: float | None = None
     qber_by_basis: dict[str, float] | None = None
+    eavesdropper_knowledge: float | None = None
+    # Per-participant records, position by position. None on trials past the
+    # first: they are large, and an interface only ever animates one.
+    #
+    # The protocol phases are NOT streamed as separate events. A trial runs
+    # synchronously and its qubits are simulated one at a time in density-matrix
+    # mode, so emitting an event per qubit would flood the channel with more
+    # traffic than physics. The interface replays preparation, transit, sifting
+    # and estimation from these views instead, which gives the same animation
+    # under its own control of pacing. Streaming them for real would mean
+    # turning the protocols into generators — deferred, and not needed for it.
+    views: dict | None = None
 
     def as_dict(self) -> dict:
         return {
@@ -99,6 +112,8 @@ class TrialResult:
             "chsh": self.chsh,
             "chsh_sigma": self.chsh_sigma,
             "qber_by_basis": self.qber_by_basis,
+            "eavesdropper_knowledge": self.eavesdropper_knowledge,
+            "views": self.views,
         }
 
 
@@ -142,6 +157,8 @@ def _run_bb84(config: SimulationConfig, seed: int, channel, eavesdropper) -> Tri
         sifting_ratio=sifting_ratio(len(result.alice_sifted), config.n_qubits),
         n_sifted=len(result.alice_sifted),
         qber_by_basis=by_basis,
+        eavesdropper_knowledge=result.eavesdropper_knowledge(),
+        views=result.views(),
     )
 
 
@@ -165,6 +182,7 @@ def _run_e91(config: SimulationConfig, seed: int, channel, eavesdropper) -> Tria
         n_sifted=len(result.alice_sifted),
         chsh=s,
         chsh_sigma=chsh_uncertainty(per_setting),
+        views=result.views(),
     )
 
 
@@ -212,6 +230,10 @@ def stream(config: SimulationConfig) -> Iterator[SimulationEvent]:
     results: list[TrialResult] = []
     for index in range(config.trials):
         trial = execute(config, config.seed + index, channel, eavesdropper)
+        # Views are kept on the first trial only: they are proportional to
+        # n_qubits, and an interface animates one run rather than all of them.
+        if index > 0:
+            trial = replace(trial, views=None)
         results.append(trial)
         yield SimulationEvent(kind=EventKind.TRIAL, index=index, payload=trial.as_dict())
 
@@ -232,6 +254,113 @@ def run(config: SimulationConfig) -> RunResult:
             last = event
     assert last is not None
     return _rebuild(last.payload)
+
+
+class SweepAxis(str, Enum):
+    """Which parameter a sweep varies.
+
+    Closed set rather than a free path into the configuration: a sweep over an
+    arbitrary field would be more general and would also allow varying the seed,
+    which produces a curve of pure noise that looks like a result.
+    """
+
+    GAMMA = "gamma"
+    LENGTH_KM = "length_km"
+    ATTACK_FRACTION = "attack_fraction"
+
+
+def _with_axis(config: SimulationConfig, axis: SweepAxis, value: float) -> SimulationConfig:
+    """A copy of `config` with one parameter moved to `value`."""
+    data = config.model_dump()
+    if axis is SweepAxis.GAMMA:
+        data["channel"] = {"kind": "amplitude_damping", "gamma": value, "length_km": None}
+    elif axis is SweepAxis.LENGTH_KM:
+        data["channel"] = {"kind": "amplitude_damping", "gamma": None, "length_km": value}
+    else:
+        data["attack"] = {**data["attack"], "kind": "intercept_resend", "fraction": value}
+    return SimulationConfig.model_validate(data)
+
+
+def sweep_stream(
+    config: SimulationConfig,
+    axis: SweepAxis,
+    values: list[float],
+) -> Iterator[SimulationEvent]:
+    """Run the configuration once per value, yielding a point as each lands.
+
+    This is the mode that produces the figures. A single run answers "what
+    happened"; a sweep answers "how does it behave", and the assignment's
+    results — the error rate against the damping parameter, against the
+    intercepted fraction, the Bell parameter degrading with noise — are all
+    curves rather than numbers.
+
+    Points are streamed because each one is a complete run: in density-matrix
+    mode a sweep of twenty points is twenty simulations, and a progress bar that
+    only fills at the end is a progress bar nobody watches.
+
+    The views are stripped from sweep points. They are proportional to the qubit
+    count and multiply by the number of points, and nothing in a curve needs
+    them.
+
+    Args:
+        config: the base configuration; every field except the swept one is held.
+        axis: which parameter to vary.
+        values: the points to evaluate, in the order they should be plotted.
+
+    Raises:
+        ValueError: if no values are given.
+    """
+    if not values:
+        raise ValueError("a sweep needs at least one value")
+
+    yield SimulationEvent(
+        kind=EventKind.STARTED,
+        payload={"axis": axis.value, "values": list(values), "points": len(values)},
+    )
+
+    points = []
+    for index, value in enumerate(values):
+        result = run(_with_axis(config, axis, value))
+        point = {
+            "value": value,
+            "qber": result.qber_mean,
+            "qber_stdev": result.qber_stdev,
+            "chsh": result.chsh_mean,
+            "chsh_stdev": result.chsh_stdev,
+            "accepted": result.accepted,
+            # Kept per point because the split by basis is the whole reason the
+            # damping curve is worth plotting: the two bases must be separate
+            # series, or the asymmetry averages away.
+            "qber_by_basis": result.trials[0].qber_by_basis,
+            "eavesdropper_knowledge": result.trials[0].eavesdropper_knowledge,
+        }
+        points.append(point)
+        yield SimulationEvent(kind=EventKind.SWEEP_POINT, index=index, payload=point)
+
+    yield SimulationEvent(
+        kind=EventKind.DONE, payload={"axis": axis.value, "points": points}
+    )
+
+
+def sweep(config: SimulationConfig, axis: SweepAxis, values: list[float]) -> list[dict]:
+    """Run a sweep and return the curve, consuming the same stream."""
+    for event in sweep_stream(config, axis, values):
+        if event.kind is EventKind.DONE:
+            return event.payload["points"]
+    return []
+
+
+def linspace(start: float, stop: float, points: int) -> list[float]:
+    """Evenly spaced values, endpoints included.
+
+    Here rather than left to the caller so that a sweep requested over HTTP can
+    be described by three numbers instead of a list that has to be built
+    client-side and can silently disagree with what the axis allows.
+    """
+    if points < 2:
+        raise ValueError("a sweep needs at least two points")
+    step = (stop - start) / (points - 1)
+    return [start + step * i for i in range(points)]
 
 
 def _aggregate(config: SimulationConfig, results: list[TrialResult]) -> RunResult:

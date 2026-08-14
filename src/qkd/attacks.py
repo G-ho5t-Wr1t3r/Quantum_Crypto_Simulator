@@ -56,22 +56,30 @@ class Attack(ABC):
     valid_positions: frozenset[Position]
 
     @abstractmethod
-    def intercept(self, circuit, qubit, rng):
+    def intercept(self, circuit, qubit, rng, journal=None):
         """Act on a qubit in flight, returning what continues to the receiver.
 
-        Called by the engine at the point the attack applies — for a channel
+        Called by the protocol at the point the attack applies — for a channel
         attack, between the sender's preparation and the receiver's
         measurement, in the same place a channel acts.
 
-        Implementations record what they learn on the attacker's view, because
-        what the adversary ends up knowing is the result the security argument
-        turns on, not a by-product.
+        THE JOURNAL is how the attacker's view gets recorded. When a list is
+        passed, the implementation appends one entry per qubit describing what
+        it did: the basis it chose, or None if it let that qubit through
+        untouched. One entry per call, so the journal stays aligned with the
+        transmitted positions by index.
+
+        It exists because what the adversary ends up knowing is the result the
+        security argument turns on, not a by-product. For intercept-resend the
+        basis alone is enough to answer it: wherever the attacker's basis
+        matches the sender's, the bit was learnt exactly.
 
         Args:
             circuit: the qubit in transit. Must not be mutated, same contract as
                 Channel.apply.
             qubit: index of the qubit under attack.
             rng: seeded generator, so an attacked run stays reproducible.
+            journal: optional list to append this qubit's record to.
 
         Returns:
             The circuit that continues towards the receiver.
@@ -205,6 +213,7 @@ class InterceptResend(Attack):
         circuit: QuantumCircuit,
         qubit: int,
         rng: np.random.Generator,
+        journal: list | None = None,
     ) -> QuantumCircuit:
         """Measure `qubit` in a basis drawn at random, and forward the result.
 
@@ -216,11 +225,15 @@ class InterceptResend(Attack):
                 both: attacking a single arm is what F6 needs.
             rng: seeded generator — Eve's basis choices are part of the run and
                 have to be reproducible like everything else.
+            journal: optional list; receives the basis used on this qubit, or
+                None when it was let through.
 
         Returns:
             The circuit that continues towards the receiver.
         """
         if rng.random() >= self.fraction:
+            if journal is not None:
+                journal.append(None)
             return circuit.copy()
 
         attacked = circuit.copy()
@@ -230,6 +243,8 @@ class InterceptResend(Attack):
         # Eve's basis, drawn blind: 0 rectilinear, 1 diagonal, matching the
         # convention bb84.prepare fixes.
         basis = int(rng.integers(0, 2))
+        if journal is not None:
+            journal.append(basis)
 
         if basis == 1:
             attacked.h(qubit)

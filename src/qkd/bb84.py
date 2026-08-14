@@ -19,7 +19,7 @@ her bases only after Bob confirms he has measured. Reversing the two steps
 would leave the protocol intact and the security gone.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 from qiskit import QuantumCircuit
@@ -56,6 +56,60 @@ class BB84Run:
     # QBER of an asymmetric channel depends on the basis, and E4 has to split
     # the sifted key in two to show it.
     sifted_bases: Bases
+
+    # What each participant knows, position by position, all lists aligned by
+    # index over the transmitted qubits. Empty for the eavesdropper when nobody
+    # was listening.
+    #
+    # A run's raw sequences above are omniscient by construction, which is right
+    # for computing metrics and wrong as a description of what anyone knows.
+    # These are what the interface shows when a node is clicked, and what the
+    # sifting animation replays. Keeping them separate also keeps the code
+    # honest: code that only has Bob's view cannot accidentally read Alice's
+    # bits.
+    eve_bases: Bases = field(default_factory=list)
+
+    def views(self) -> dict:
+        """Per-participant records, JSON-serialisable, aligned by position.
+
+        `survived` marks the positions that outlived sifting, which is what an
+        animation needs to fade the discarded ones out.
+        """
+        survived = [a == b for a, b in zip(self.alice_bases, self.bob_bases)]
+        views = {
+            "alice": {"bases": list(self.alice_bases), "bits": list(self.alice_bits)},
+            "bob": {"bases": list(self.bob_bases), "outcomes": list(self.bob_bits)},
+            "survived_sifting": survived,
+        }
+        if self.eve_bases:
+            views["eve"] = {"bases": list(self.eve_bases)}
+        return views
+
+    def eavesdropper_knowledge(self) -> float | None:
+        """Fraction of the sifted key the eavesdropper learnt exactly.
+
+        Wherever the attacker happened to pick the sender's basis, it measured
+        an eigenstate: it read the bit with certainty and left no trace. That is
+        the invisible half of intercept-resend, and quoting it next to the QBER
+        is what makes the trade-off concrete — the error rate is the price paid
+        for the other half, the one guessed wrong.
+
+        Returns None when nobody was listening, rather than zero: not knowing
+        and knowing nothing are different statements.
+        """
+        if not self.eve_bases:
+            return None
+
+        learnt = total = 0
+        for alice_basis, bob_basis, eve_basis in zip(
+            self.alice_bases, self.bob_bases, self.eve_bases
+        ):
+            if alice_basis != bob_basis:
+                continue  # discarded by sifting; never part of the key
+            total += 1
+            if eve_basis == alice_basis:
+                learnt += 1
+        return learnt / total if total else 0.0
 
     def sifted_in_basis(self, basis: int) -> tuple[Bits, Bits]:
         """The subset of the sifted key measured in one given basis.
@@ -264,10 +318,11 @@ def run(
     # ordering is the physical content of the model, not an implementation detail.
     bob_bases = random_bits(n_bits, rng)
     bob_bits = []
+    eve_bases: list = []
     for qubit, base in zip(alice_qubits, bob_bases):
         in_transit = channel.apply(qubit, 0)
         for attack in attacks:
-            in_transit = attack.intercept(in_transit, 0, rng)
+            in_transit = attack.intercept(in_transit, 0, rng, journal=eve_bases)
         bob_bit = measure(in_transit, base, rng)
         bob_bits.append(bob_bit)
 
@@ -285,5 +340,6 @@ def run(
         bob_bases=bob_bases,
         bob_sifted=bob_sifted,
         sifted_bases=sifted_bases,
+        eve_bases=eve_bases,
         )
     return execution

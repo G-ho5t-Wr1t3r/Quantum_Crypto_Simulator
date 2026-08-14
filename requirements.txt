@@ -1,7 +1,7 @@
-# Python 3.12
+# Python 3.14
 #
 # In a conda environment:
-#   conda create -n qkd python=3.12
+#   conda create -n quantum python=3.14
 #   conda activate qkd
 #   pip install -r requirements.txt
 #

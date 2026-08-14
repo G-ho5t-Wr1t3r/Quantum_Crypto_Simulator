@@ -80,6 +80,22 @@ class E91Run:
     bob_outcomes: Bits
     alice_sifted: Bits
     bob_sifted: Bits
+    # Bases the eavesdropper used on the intercepted arm; empty if nobody was
+    # listening. Unlike BB84 the entry is per pair, not per transmitted qubit,
+    # because the attack acts once on the pair.
+    eve_bases: tuple = ()
+
+    def views(self) -> dict:
+        """Per-participant records, aligned by pair index."""
+        survived = [a == b for a, b in zip(self.alice_angles, self.bob_angles)]
+        views = {
+            "alice": {"angles": list(self.alice_angles), "outcomes": list(self.alice_outcomes)},
+            "bob": {"angles": list(self.bob_angles), "outcomes": list(self.bob_outcomes)},
+            "survived_sifting": survived,
+        }
+        if self.eve_bases:
+            views["eve"] = {"bases": list(self.eve_bases)}
+        return views
 
 
 def bell_pair() -> QuantumCircuit:
@@ -295,8 +311,9 @@ def run(
     # Eve intercepts ONE arm. Attacking both would be a different scenario — two
     # independent eavesdroppers — and the asymmetry is the point: breaking a single arm is
     # already enough to destroy the entanglement the whole security argument rests on.
+    eve_bases: list = []
     for attack in attacks:
-        bell_p = attack.intercept(bell_p, 0, rng)
+        bell_p = attack.intercept(bell_p, 0, rng, journal=eve_bases)
 
     # PHASE 2: Alice & Bob need to choose random angle for measuring
     alice_idx = rng.integers(0, len(ALICE_ANGLES), size=n_pairs)
@@ -320,6 +337,7 @@ def run(
         alice_outcomes = alice_outcomes,
         bob_outcomes = bob_outcomes,
         alice_sifted = alice_sifted,
-        bob_sifted = bob_sifted
+        bob_sifted = bob_sifted,
+        eve_bases = eve_bases
         )
     return execution

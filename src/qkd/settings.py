@@ -262,13 +262,6 @@ class SimulationConfig(BaseModel):
     attack: AttackConfig = Field(default_factory=AttackConfig)
     security: SecurityPolicy = Field(default_factory=SecurityPolicy)
 
-    @model_validator(mode="after")
-    def _chsh_needs_entanglement(self) -> SimulationConfig:
-        if self.protocol is ProtocolKind.BB84 and self.security.chsh_confidence != 3:
-            # Not an error: the field simply has no effect here, and saying so is
-            # kinder than letting someone tune a knob that is not connected.
-            pass
-        return self
 
     def save(self, path: str | Path) -> None:
         """Write this configuration as a JSON preset."""
