@@ -343,3 +343,24 @@ def run(
         eve_bases=eve_bases,
         )
     return execution
+
+# Who takes part and how they are wired, for an interface that draws the run.
+# Lives here because it describes this protocol, not the transport that serves it.
+TOPOLOGY = {
+    "nodes": [
+        {"id": "alice", "label": "Alice", "role": "sender", "position": "endpoint"},
+        {"id": "bob", "label": "Bob", "role": "receiver", "position": "endpoint"},
+        {"id": "eve", "label": "Eve", "role": "eavesdropper", "position": "channel",
+         "optional": True},
+    ],
+    "links": [
+        # The quantum link is the one an attacker can sit on, and the one whose
+        # colour changes per qubit: `views.eve.bases[i]` is null when that qubit
+        # passed untouched.
+        {"source": "alice", "target": "bob", "kind": "quantum", "attackable": True},
+        # The classical link is assumed authenticated. Nothing secret crosses it —
+        # bases and the comparison sample — but without authentication the whole
+        # protocol falls to a man in the middle.
+        {"source": "alice", "target": "bob", "kind": "classical", "attackable": False},
+    ],
+}

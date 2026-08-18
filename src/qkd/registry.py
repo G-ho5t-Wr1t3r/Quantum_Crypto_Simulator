@@ -39,6 +39,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from qkd import bb84, e91
 from qkd.actors import Actor, Eavesdropper, Player, Position, Role
 from qkd.attacks import Attack, InterceptResend
 from qkd.channels import AmplitudeDamping, Channel, IdealChannel
@@ -212,6 +213,26 @@ def available_attacks() -> dict[str, list[str]]:
     return described
 
 
+def topologies() -> dict:
+    """How each protocol is wired: who exists and what connects them.
+
+    Served so that an interface can draw the run without hard-coding the shape
+    of a protocol on the other side. Adding a protocol then means adding it here
+    and nowhere else — the same argument as the rest of the registry.
+
+    Each link declares whether an attacker can sit on it. That is what lets a map
+    colour the quantum channel per qubit while leaving the classical one alone,
+    and it states visually what the code already states: the classical link is
+    assumed authenticated, so nothing on the map should suggest it can be
+    tampered with.
+
+    Per-qubit colouring comes from the run itself, not from here: in the views,
+    `eve.bases[i]` is null on a qubit that passed untouched and carries the basis
+    used on one that did not.
+    """
+    return {"bb84": bb84.TOPOLOGY, "e91": e91.TOPOLOGY}
+
+
 def describe() -> dict[str, object]:
     """Everything registered, in a JSON-serialisable form.
 
@@ -222,4 +243,5 @@ def describe() -> dict[str, object]:
         "channels": available_channels(),
         "attacks": available_attacks(),
         "positions": sorted(p.value for p in Position),
+        "topologies": topologies(),
     }

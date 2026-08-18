@@ -341,3 +341,24 @@ def run(
         eve_bases = eve_bases
         )
     return execution
+
+# Who takes part and how they are wired. Unlike BB84 there is a third node: the
+# source sits between the two parties and sends one particle each way, which is
+# why nobody "transmits" the key here.
+TOPOLOGY = {
+    "nodes": [
+        {"id": "source", "label": "Sorgente", "role": "source", "position": "endpoint"},
+        {"id": "alice", "label": "Alice", "role": "receiver", "position": "endpoint"},
+        {"id": "bob", "label": "Bob", "role": "receiver", "position": "endpoint"},
+        {"id": "eve", "label": "Eve", "role": "eavesdropper", "position": "channel",
+         "optional": True},
+    ],
+    "links": [
+        # Eve attacks ONE arm. Breaking a single one already destroys the
+        # entanglement the security argument rests on, so the interface should be
+        # able to colour the two arms differently.
+        {"source": "source", "target": "alice", "kind": "quantum", "attackable": True},
+        {"source": "source", "target": "bob", "kind": "quantum", "attackable": False},
+        {"source": "alice", "target": "bob", "kind": "classical", "attackable": False},
+    ],
+}

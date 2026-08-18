@@ -7,6 +7,27 @@ policy and live in the configuration, not here.
 All functions take keys that have already been sifted. Sifting is the
 protocol's responsibility (see bb84.py / e91.py), because the notion of
 "matching bases" is protocol-specific.
+
+DECLARED LIMITATION — the sacrificed sample is not modelled
+============================================================
+In the real protocol the QBER is estimated on a random SUBSET of the sifted key
+which is announced publicly, compared, and then discarded: those bits are burnt
+and cannot become key. This simulator compares the sifted keys in full, which a
+simulation can do because it observes both sides at once and a participant
+cannot.
+
+The consequence is deliberate and worth stating rather than hiding. What is
+being studied here is the VALUE of the error rate — how it grows with damping,
+what an interception does to it, how it compares against a threshold — and none
+of that needs the residual key length. Modelling the sacrifice would add a
+parameter and make the QBER noisier, in exchange for a quantity the assignment
+does not ask for.
+
+It is also why there is no key-rate function. Without a sacrificed sample the
+usable key IS the sifted key, so a key rate would be `sifting_ratio` under a
+second name. The three-way distinction between sifted key, test sample and final
+key is real and belongs in the report; it simply is not something this code
+draws, and saying so is better than implying otherwise with a duplicate metric.
 """
 
 from qkd.types import Bits
@@ -127,47 +148,6 @@ def sifting_ratio(n_sifted: int, n_sent: int) -> float:
         sifting_ratio =  n_sifted / n_sent
         return sifting_ratio
 
-
-def key_rate(n_final: int, n_sent: int) -> float:
-    """Usable key bits obtained per qubit transmitted.
-
-    `n_final` is the sifted key minus the bits revealed publicly to estimate the
-    QBER, which are burned and cannot be counted as key.
-
-    This is therefore a RAW key rate, not a secret key rate. Eve may still hold
-    partial information on those bits, both from an interception and from the
-    parities leaked during reconciliation. Only a key that has gone through
-    reconciliation and privacy amplification supports a claim of secrecy, and
-    neither is implemented here.
-
-    The choice of stage is deliberate rather than circumstantial: a metric can
-    only report what exists at the point of the pipeline where it is computed,
-    and the amplified key does not exist yet. The report must use these same
-    words — the same symbol must not mean two things in two chapters.
-
-    Args:
-        n_final: length of the key you are claiming as the output.
-        n_sent: number of qubits Alice transmitted.
-
-    Returns:
-        Rate in [0, 1].
-
-    Raises:
-        ValueError:
-            - if n_sent < 0
-            - if n_final < 0
-            - if n_final > n_sent
-    """
-    if n_sent < 0:
-        raise ValueError("Cannot send a negative quantity of bits")
-    elif n_final < 0:
-        raise ValueError("The final value (sifted key - revealed bits) cannot be negative")
-    elif n_final > n_sent:
-        raise ValueError("Final value cannot be bigger than sent bits")
-    else:
-        return n_final / n_sent
-
-# E91 =========
 
 def correlator(alice_outcomes: Bits, bob_outcomes: Bits) -> float:
     """Correlation E between two sequences of paired measurement outcomes.

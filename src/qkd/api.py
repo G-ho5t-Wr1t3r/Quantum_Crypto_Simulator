@@ -40,11 +40,14 @@ from __future__ import annotations
 import asyncio
 import csv
 import io
+import os
 import uuid
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -59,8 +62,19 @@ from qkd.engine import (
     stream,
     sweep_stream,
 )
+from qkd.engine import run as engine_run
 from qkd.registry import UnknownPluginError, describe
 from qkd.settings import SimulationConfig, json_schema
+
+
+# Operational limits, read from .env with the defaults documented in
+# .env.example. They are limits, not secrets: the example file is checked in so
+# that the values are visible without reading this source.
+load_dotenv()
+
+MAX_CONCURRENT_RUNS = int(os.getenv("QKD_MAX_CONCURRENT_RUNS", "5"))
+RUN_HISTORY = int(os.getenv("QKD_RUN_HISTORY", "20"))
+MAX_SYNC_QUBITS = int(os.getenv("QKD_MAX_SYNC_QUBITS", "200"))
 
 
 class RunStatus(str, Enum):
@@ -112,7 +126,45 @@ class RunState:
         }
 
 
-_RUNS: dict[str, RunState] = {}
+# Ordered so that the oldest finished run is the first to go. Not unbounded,
+# because a run keeps its per-participant views and those grow with the qubit
+# count; not a single slot either, because comparing two runs side by side — the
+# noise-against-attack figure — needs both of them still present.
+_RUNS: "OrderedDict[str, RunState]" = OrderedDict()
+
+
+def _register(state: RunState) -> None:
+    """Store a run and drop the oldest finished ones beyond the history limit.
+
+    Only finished runs are evicted. Dropping one still executing would leave a
+    worker thread writing into a state nobody can reach, and the client polling
+    it would get a 404 for a run that is very much alive.
+    """
+    _RUNS[state.run_id] = state
+    for run_id in list(_RUNS):
+        if len(_RUNS) <= RUN_HISTORY:
+            break
+        if run_id != state.run_id and _RUNS[run_id].status is not RunStatus.RUNNING:
+            del _RUNS[run_id]
+
+
+def _refuse_if_busy() -> None:
+    """Reject a new run when too many are already going.
+
+    Refused with 429 rather than queued: this simulator drives one dashboard at
+    a time, and a caller who is told "not now" can retry, whereas one whose run
+    sits invisibly in a queue only learns something is wrong from the silence.
+
+    Raises:
+        HTTPException: 429 when the ceiling is reached.
+    """
+    active = sum(1 for s in _RUNS.values() if s.status is RunStatus.RUNNING)
+    if active >= MAX_CONCURRENT_RUNS:
+        raise HTTPException(
+            status_code=429,
+            detail=f"{active} runs already in flight; the limit is "
+            f"{MAX_CONCURRENT_RUNS} (QKD_MAX_CONCURRENT_RUNS)",
+        )
 
 
 class SweepRequest(BaseModel):
@@ -200,10 +252,28 @@ def _launch(state: RunState, produce) -> None:
 def _validate_upfront(produce) -> None:
     """Draw the first event so that an impossible run fails on the POST.
 
-    The engine validates the attacker's placement before its first trial, so
-    pulling one event is enough to surface a rejection while the client is still
-    holding the request — rather than reporting a failed run they have to poll
-    for. A configuration that cannot work should not receive a run identifier.
+    HOW THIS INTERACTS WITH `_launch`, because it looks like a mistake and is not.
+
+    `produce` is a zero-argument callable that builds a FRESH generator each time
+    it is called, rather than a generator itself. It is called twice: once here,
+    and once inside `_launch`.
+
+    Here, one event is pulled and the generator is closed. The engine validates
+    the attacker's placement before its first trial, so that single step is
+    enough to surface a rejection while the client is still holding the request.
+    A configuration that cannot work never receives a run identifier, which is
+    what the acceptance criterion asks: the framework must PREVENT an impossible
+    run, and telling someone about it later, through a failed run they have to
+    poll for, is not preventing it.
+
+    `_launch` then starts over from a new generator. The cost is one discarded
+    `started` event — nothing, since no simulation has run at that point. The
+    alternative, handing this half-consumed generator to the worker, would mean
+    the first event never reaches the client, and the stream would open with a
+    trial instead of a start.
+
+    Passing a callable rather than a generator is therefore not incidental: it is
+    what makes "validate, then run from the beginning" expressible at all.
     """
     generator = produce()
     try:
@@ -218,6 +288,7 @@ async def simulate(config: SimulationConfig) -> dict:
 
     Returns 202 rather than 200: the run has been accepted, not completed.
     """
+    _refuse_if_busy()
     try:
         _validate_upfront(lambda: stream(config))
     except AttackNotAllowedError as exc:
@@ -226,7 +297,7 @@ async def simulate(config: SimulationConfig) -> dict:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
     state = RunState(run_id=str(uuid.uuid4()))
-    _RUNS[state.run_id] = state
+    _register(state)
     _launch(state, lambda: stream(config))
     return {"run_id": state.run_id, "status": state.status.value}
 
@@ -238,6 +309,7 @@ async def start_sweep(request: SweepRequest) -> dict:
     Each point is a complete run, so a sweep is the long-running case: the
     identifier and the event stream matter more here than anywhere else.
     """
+    _refuse_if_busy()
     values = linspace(request.start, request.stop, request.points)
 
     def produce():
@@ -249,9 +321,49 @@ async def start_sweep(request: SweepRequest) -> dict:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     state = RunState(run_id=str(uuid.uuid4()))
-    _RUNS[state.run_id] = state
+    _register(state)
     _launch(state, produce)
     return {"run_id": state.run_id, "status": state.status.value, "points": len(values)}
+
+
+@app.post("/simulate/sync", tags=["runs"])
+async def simulate_sync(config: SimulationConfig) -> dict:
+    """Run a small configuration and return the result in the response.
+
+    For the "fast run" case: a preset where the only choices are the protocol
+    and whether anyone is listening, small enough to finish while the request is
+    still open. It saves the interface the identifier-then-poll dance for runs
+    that would have completed before the first poll anyway.
+
+    Refused above `QKD_MAX_SYNC_QUBITS`, because a configuration large enough to
+    take minutes would hold the connection open and time out somewhere in the
+    middle — with no identifier to recover the run afterwards. The asynchronous
+    endpoint exists for those.
+
+    Same worker thread as everywhere else: the engine is synchronous, so running
+    it on the event loop would block every other request for the duration.
+
+    Raises:
+        HTTPException: 413 if the configuration is too large for this endpoint,
+            422 if the attacker cannot act from where it was placed.
+    """
+    if config.n_qubits > MAX_SYNC_QUBITS:
+        raise HTTPException(
+            status_code=413,
+            detail=f"{config.n_qubits} qubits is too many to run synchronously; "
+            f"the limit is {MAX_SYNC_QUBITS} (QKD_MAX_SYNC_QUBITS). "
+            f"Use POST /simulate instead.",
+        )
+
+    _refuse_if_busy()
+    try:
+        result = await asyncio.to_thread(engine_run, config)
+    except AttackNotAllowedError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except UnknownPluginError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    return result.as_dict()
 
 
 def _get(run_id: str) -> RunState:
@@ -346,6 +458,23 @@ async def stream_events(websocket: WebSocket, run_id: str) -> None:
     A client that connects late, or reloads mid-run, is brought up to date and
     then continues live. The socket closes once the run finishes and everything
     has been delivered.
+
+    AN INVARIANT TO PRESERVE. The loop below drains whatever has accumulated,
+    checks whether the run is over, and only then waits for the next
+    notification. It is correct because THERE IS NO SUSPENSION POINT between the
+    drain and the wait.
+
+    That matters because `RunState._wake` sets its event and clears it in the
+    same breath: it wakes whoever is already waiting and leaves nothing behind
+    for whoever arrives afterwards. Since this coroutine cannot be descheduled
+    between reading `len(state.events)` and reaching `wait()`, no notification
+    can slip through the gap — there is no gap.
+
+    Insert an `await` in there and the property is gone. The loop would then be
+    able to miss a wake-up and hang until the following event, or forever if the
+    one it missed was the last. It is the kind of defect introduced by "just
+    adding a log line", and it would not show up in a fast test: only a run whose
+    final event lands at exactly the wrong moment would hang.
     """
     await websocket.accept()
 
