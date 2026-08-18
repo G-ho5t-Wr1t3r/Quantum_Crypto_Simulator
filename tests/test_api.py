@@ -295,3 +295,99 @@ class TestOpenApi:
 
     def test_the_specification_is_serialisable(self):
         json.dumps(client.get("/openapi.json").json())
+
+
+class TestTopology:
+    """What an interface needs to draw the network before any run starts."""
+
+    def test_each_protocol_declares_its_nodes(self):
+        topologies = client.get("/plugins").json()["topologies"]
+        assert [n["id"] for n in topologies["bb84"]["nodes"]] == ["alice", "bob", "eve"]
+        assert "source" in [n["id"] for n in topologies["e91"]["nodes"]]
+
+    def test_only_quantum_links_are_attackable(self):
+        """The classical link is assumed authenticated; the map must say so."""
+        for topology in client.get("/plugins").json()["topologies"].values():
+            for link in topology["links"]:
+                if link["attackable"]:
+                    assert link["kind"] == "quantum"
+
+    def test_e91_exposes_only_one_attackable_arm(self):
+        """Eve breaks a single arm, and that asymmetry is the point of F6."""
+        links = client.get("/plugins").json()["topologies"]["e91"]["links"]
+        assert sum(1 for link in links if link["attackable"]) == 1
+
+
+class TestSyncRun:
+    """The fast-run path: small preset, answer in the response."""
+
+    def test_a_small_run_returns_its_result_directly(self):
+        body = client.post("/simulate/sync", json={"n_qubits": 60, "seed": 1}).json()
+        assert body["qber_mean"] == 0.0
+        assert body["accepted"] is True
+
+    def test_it_agrees_with_the_asynchronous_path(self):
+        """Same engine, so the two must not be able to disagree."""
+        config = {"n_qubits": 60, "seed": 7, "attack": {"kind": "intercept_resend"}}
+        direct = client.post("/simulate/sync", json=config).json()
+        run_id = client.post("/simulate", json=config).json()["run_id"]
+        assert _wait(run_id)["result"] == direct
+
+    def test_a_large_configuration_is_refused(self):
+        """Held connections and timeouts are worse than an explicit refusal."""
+        response = client.post("/simulate/sync", json={"n_qubits": 5000, "seed": 1})
+        assert response.status_code == 413
+        assert "/simulate" in response.json()["detail"]
+
+    def test_an_impossible_placement_is_refused_here_too(self):
+        config = {
+            "n_qubits": 20,
+            "seed": 1,
+            "attack": {"kind": "intercept_resend", "position": "endpoint"},
+        }
+        assert client.post("/simulate/sync", json=config).status_code == 422
+
+
+class TestOperationalLimits:
+    def test_the_history_drops_the_oldest_finished_runs(self):
+        """Bounded on purpose: a run keeps views proportional to its qubit count."""
+        from qkd.api import _RUNS, RUN_HISTORY, RunState, RunStatus, _register
+
+        _RUNS.clear()
+        for index in range(RUN_HISTORY + 5):
+            state = RunState(run_id=f"old-{index}")
+            state.status = RunStatus.COMPLETED
+            _register(state)
+
+        assert len(_RUNS) == RUN_HISTORY
+        assert "old-0" not in _RUNS
+        assert f"old-{RUN_HISTORY + 4}" in _RUNS
+        _RUNS.clear()
+
+    def test_a_running_run_is_never_evicted(self):
+        """Evicting one would strand a worker thread writing into nothing."""
+        from qkd.api import _RUNS, RUN_HISTORY, RunState, RunStatus, _register
+
+        _RUNS.clear()
+        alive = RunState(run_id="alive")
+        _register(alive)
+        for index in range(RUN_HISTORY + 5):
+            done = RunState(run_id=f"done-{index}")
+            done.status = RunStatus.COMPLETED
+            _register(done)
+
+        assert "alive" in _RUNS
+        _RUNS.clear()
+
+    def test_too_many_concurrent_runs_are_refused(self):
+        """429 rather than a silent queue: the caller learns it did not start."""
+        from qkd.api import _RUNS, MAX_CONCURRENT_RUNS, RunState, _register
+
+        _RUNS.clear()
+        for index in range(MAX_CONCURRENT_RUNS):
+            _register(RunState(run_id=f"busy-{index}"))  # default status: running
+
+        response = client.post("/simulate", json={"n_qubits": 20, "seed": 1})
+        assert response.status_code == 429
+        assert "QKD_MAX_CONCURRENT_RUNS" in response.json()["detail"]
+        _RUNS.clear()
