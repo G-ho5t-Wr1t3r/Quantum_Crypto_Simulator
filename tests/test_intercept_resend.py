@@ -13,6 +13,7 @@ import pytest
 from qkd import bb84, e91
 from qkd.actors import Eavesdropper, Player, Role
 from qkd.attacks import AttackNotAllowedError, InterceptResend
+from qkd.channels import IdealChannel
 from qkd.metrics import chsh_S, qber
 
 SEED = 20260812
@@ -198,3 +199,55 @@ class TestF6BellViolationCollapse:
             )
         )
         assert untouched > abs(_e91_s(0.5)) > abs(_e91_s(1.0)) - 0.6
+
+
+class TestEveDecidesPerPairInE91:
+    """Her choice is per pair, not once for the whole run.
+
+    Building the Bell pair once and attacking it once meant every pair inherited
+    the same decision: `fraction` stopped being the share of pairs touched and
+    became the probability of attacking everything. S then had only two possible
+    values — undisturbed, or destroyed — with nothing in between, which is not
+    what a partial attack looks like and made the whole F6 sweep meaningless.
+    """
+
+    def test_the_journal_has_one_entry_per_pair(self):
+        eve = Eavesdropper(capabilities=[InterceptResend(0.5)])
+        result = e91.run(200, seed=1, channel=IdealChannel(), eavesdropper=eve)
+        assert len(result.eve_bases) == 200
+
+    def test_the_touched_share_follows_the_configured_fraction(self):
+        eve = Eavesdropper(capabilities=[InterceptResend(0.5)])
+        result = e91.run(800, seed=2, channel=IdealChannel(), eavesdropper=eve)
+        touched = sum(1 for basis in result.eve_bases if basis is not None)
+        assert 0.42 < touched / 800 < 0.58
+
+    def test_she_does_not_reuse_one_basis_for_the_whole_run(self):
+        """The defect that showed on screen: a single basis for every pair."""
+        eve = Eavesdropper(capabilities=[InterceptResend(1.0)])
+        result = e91.run(200, seed=3, channel=IdealChannel(), eavesdropper=eve)
+        assert len(set(result.eve_bases)) > 1
+
+    def test_the_bell_parameter_degrades_gradually(self):
+        """Not a jump between the two extremes: a partial attack is partial."""
+        values = []
+        for fraction in (0.0, 0.5, 1.0):
+            eve = Eavesdropper(capabilities=[InterceptResend(fraction)])
+            result = e91.run(900, seed=20260819, channel=IdealChannel(), eavesdropper=eve)
+            values.append(
+                chsh_S(
+                    *e91.chsh_correlators(
+                        result.alice_angles,
+                        result.bob_angles,
+                        result.alice_outcomes,
+                        result.bob_outcomes,
+                    )
+                )
+            )
+
+        clean, half, full = values
+        assert clean > half > full
+        # Halfway between the two ends, not sitting on either of them.
+        assert full + 0.2 < half < clean - 0.2
+        # A fully intercepted arm leaves the correlations classical: 2/sqrt(2).
+        assert abs(full - math.sqrt(2)) < 0.15

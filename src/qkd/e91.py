@@ -304,16 +304,14 @@ def run(
     # Damping only one arm would describe a different setup: a source co-located with one party.
     # The asymmetric case is not lost, it is simply a different scenario — and it is precisely
     # the one F6 builds, where Eve intercepts a single arm.
+    # Built once, and once is correct: the source emits the same state every time and the
+    # channel is a fixed CPTP map with no randomness of its own. Nothing about this circuit
+    # differs from pair to pair.
     bell_p = bell_pair()
     bell_p = channel.apply(bell_p, 0)
     bell_p = channel.apply(bell_p, 1)
 
-    # Eve intercepts ONE arm. Attacking both would be a different scenario — two
-    # independent eavesdroppers — and the asymmetry is the point: breaking a single arm is
-    # already enough to destroy the entanglement the whole security argument rests on.
     eve_bases: list = []
-    for attack in attacks:
-        bell_p = attack.intercept(bell_p, 0, rng, journal=eve_bases)
 
     # PHASE 2: Alice & Bob need to choose random angle for measuring
     alice_idx = rng.integers(0, len(ALICE_ANGLES), size=n_pairs)
@@ -322,9 +320,22 @@ def run(
     bob_angles   = tuple(BOB_ANGLES[i]   for i in bob_idx)
     alice_outcomes, bob_outcomes = [], []
     for i in range(n_pairs):
-        alice_outcome, bob_outcome = measure_pair(circuit=bell_p, alice_angle=alice_angles[i], bob_angle=bob_angles[i], rng=rng)
+        # Eve intercepts ONE arm, and she decides again for every pair. Deciding once for
+        # the whole run would make `fraction` mean something else entirely: not the share of
+        # pairs she touches, but the probability that she attacks everything — and S would
+        # then jump between the undisturbed value and the destroyed one with nothing in
+        # between, which is not what a partial attack looks like.
+        #
+        # Attacking both arms would be a different scenario — two independent eavesdroppers —
+        # and the asymmetry is the point: breaking a single arm is already enough to destroy
+        # the entanglement the whole security argument rests on.
+        in_transit = bell_p
+        for attack in attacks:
+            in_transit = attack.intercept(in_transit, 0, rng, journal=eve_bases)
+
+        alice_outcome, bob_outcome = measure_pair(circuit=in_transit, alice_angle=alice_angles[i], bob_angle=bob_angles[i], rng=rng)
         alice_outcomes.append(alice_outcome)
-        bob_outcomes.append(bob_outcome)    
+        bob_outcomes.append(bob_outcome)
 
     # PHASE 3: sift the key
     alice_sifted, bob_sifted = sift(alice_angles=alice_angles, bob_angles=bob_angles, alice_outcomes=alice_outcomes, bob_outcomes=bob_outcomes)
