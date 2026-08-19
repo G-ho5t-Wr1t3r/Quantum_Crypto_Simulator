@@ -46,6 +46,11 @@ Object.defineProperty(window, "cancelAnimationFrame", {
 
 Object.defineProperty(window, "scrollTo", { writable: true, value: () => {} });
 
+// jsdom has no layout, so scrolling an element is not implemented. Stubbed
+// rather than avoided: bringing the summary into view when a run ends is
+// behaviour worth testing, and a test cannot observe what it cannot call.
+Object.defineProperty(Element.prototype, "scrollTo", { writable: true, value: vi.fn() });
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();

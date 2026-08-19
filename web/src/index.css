@@ -15,6 +15,7 @@
  *   --purple  diagonal (X) basis · entanglement
  *   --orange  sampled positions · mean marker
  *   --grey    discarded
+ *   --amber   the classical channel, and only that
  *
  * A component that picks a colour for decoration rather than for one of those
  * meanings is saying something the screen does not mean.
@@ -26,6 +27,7 @@
   --seg: #141418; --line: rgba(255,255,255,.08); --line-2: rgba(255,255,255,.15);
   --fg: #f2f2f4; --fg-2: #a3a3aa; --fg-3: #6b6b73;
   --blue: #4c8dff; --mint: #4cc47d; --red: #e5544b; --orange: #dc9236; --purple: #9a7ae0; --grey: #85858d;
+  --amber: #e8c15a;
   --track: rgba(255,255,255,.16); --thumb: #f2f2f4;
   --sky: #0b0b0e; --floor: #101014; --horizon: rgba(120,160,255,.10); --plot: #0b0b0e;
   --grid: rgba(255,255,255,.5); --shadow: rgba(0,0,0,.62); --hi: rgba(255,255,255,.09);
@@ -37,6 +39,7 @@
   --seg: #d5d5da; --line: rgba(0,0,0,.11); --line-2: rgba(0,0,0,.2);
   --fg: #17171a; --fg-2: #4f4f57; --fg-3: #7c7c85;
   --blue: #1667d4; --mint: #2c8a52; --red: #c4382f; --orange: #9b6410; --purple: #6f4fbf; --grey: #74747c;
+  --amber: #9a7413;
   --track: rgba(0,0,0,.16); --thumb: #ffffff;
   --sky: #cfcfd5; --floor: #e3e3e7; --horizon: rgba(60,90,160,.12); --plot: #d2d2d8;
   --grid: rgba(0,0,0,.42); --shadow: rgba(0,0,0,.28); --hi: rgba(255,255,255,.75);
@@ -110,6 +113,20 @@ input[type="range"]:focus { outline: none; }
 input[type="range"]:focus-visible {
   outline: 2px solid var(--blue);
   outline-offset: 4px;
+}
+
+/*
+ * A particle crossing a channel.
+ *
+ * Pure translation, unlike `qtravel`: a comet that changed size on the way
+ * would read as approaching the viewer rather than travelling along a line, and
+ * the only thing this has to say is which way it is going.
+ */
+@keyframes qflow {
+  0%   { transform: translateX(0); opacity: 0 }
+  12%  { opacity: 1 }
+  88%  { opacity: 1 }
+  100% { transform: translateX(var(--len)); opacity: 0 }
 }
 
 @keyframes qtravel {

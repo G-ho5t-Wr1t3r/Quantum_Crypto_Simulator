@@ -16,7 +16,7 @@ import { LangSwitch, ThemeSwitch } from "../../components/AppearanceControls";
 import type { Plugins, ProtocolKind } from "../../api/contract";
 import { useSchemaBounds, within } from "../../api/queries";
 import { useCopy, useLocale } from "../../i18n/useCopy";
-import { gammaFromLength } from "../../lib/physics";
+import { lengthFromGamma } from "../../lib/physics";
 import type { Params } from "./state";
 
 const SECTION = {
@@ -73,6 +73,8 @@ export function Sidebar({
   onReset,
   onCopy,
   copied,
+  copyFailed,
+  configJson,
   onLoad,
 }: {
   params: Params;
@@ -83,6 +85,10 @@ export function Sidebar({
   onReset: () => void;
   onCopy: () => void;
   copied: boolean;
+  /** True when neither clipboard route was allowed. */
+  copyFailed: boolean;
+  /** The configuration itself, for the reader to select when copying fails. */
+  configJson: string;
   /** Adopt a pasted configuration; false when it could not be read. */
   onLoad: (raw: string) => boolean;
 }) {
@@ -168,41 +174,19 @@ export function Sidebar({
             onChange={(value) => set("channelKind", value)}
           />
           {params.channelKind !== "ideal" && (
-            <>
-              {/* Two descriptions of one channel. Exactly one is sent. */}
-              <Segmented
-                wide
-                options={[
-                  { id: "gamma" as const, label: t.byGamma },
-                  { id: "length_km" as const, label: t.byKm },
-                ]}
-                value={params.channelMode}
-                onChange={(value) => set("channelMode", value)}
-              />
-              {params.channelMode === "gamma" ? (
-                <Slider
-                  label={t.gamma}
-                  display={params.gamma.toFixed(3)}
-                  hint={t.gammaHint}
-                  min={range("ChannelConfig.gamma", 0, 0.5).min}
-                  max={range("ChannelConfig.gamma", 0, 0.5).max}
-                  step={0.005}
-                  value={params.gamma}
-                  onChange={(value) => set("gamma", value)}
-                />
-              ) : (
-                <Slider
-                  label={t.lengthKm}
-                  display={`${params.km} km → γ ${gammaFromLength(params.km).toFixed(3)}`}
-                  hint={t.kmHint}
-                  min={range("ChannelConfig.length_km", 0, 120).min}
-                  max={range("ChannelConfig.length_km", 0, 120).max}
-                  step={1}
-                  value={params.km}
-                  onChange={(value) => set("km", value)}
-                />
-              )}
-            </>
+            // One control, both readings. γ drives because its range is bounded
+            // and evenly useful; the length is what that γ means on a real
+            // fibre, and it is what the reader actually pictures.
+            <Slider
+              label={t.attenuation}
+              display={`γ ${params.gamma.toFixed(3)} · ${lengthFromGamma(params.gamma).toFixed(1)} km`}
+              hint={t.attenuationHint}
+              min={range("ChannelConfig.gamma", 0, 0.5).min}
+              max={range("ChannelConfig.gamma", 0, 0.5).max}
+              step={0.005}
+              value={params.gamma}
+              onChange={(value) => set("gamma", value)}
+            />
           )}
         </section>
 
@@ -219,18 +203,24 @@ export function Sidebar({
           />
           {attacking && (
             <>
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                <span style={{ fontSize: 12, color: "var(--fg-3)" }}>{t.position}</span>
-                <Segmented
-                  wide
-                  options={[
-                    { id: "channel" as const, label: t.posChannel },
-                    { id: "endpoint" as const, label: t.posEndpoint },
-                  ].filter((option) => validPositions.includes(option.id))}
-                  value={params.position}
-                  onChange={(value) => set("position", value)}
-                />
-              </div>
+              {/* Only when there is something to choose. Intercept-resend
+                  declares a single valid position, and a control with one
+                  option is furniture — the diagram already shows where she
+                  stands, by breaking the link she sits on. */}
+              {validPositions.length > 1 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <span style={{ fontSize: 12, color: "var(--fg-3)" }}>{t.position}</span>
+                  <Segmented
+                    wide
+                    options={[
+                      { id: "channel" as const, label: t.posChannel },
+                      { id: "endpoint" as const, label: t.posEndpoint },
+                    ].filter((option) => validPositions.includes(option.id))}
+                    value={params.position}
+                    onChange={(value) => set("position", value)}
+                  />
+                </div>
+              )}
               <Slider
                 label={t.fraction}
                 display={`${(params.fraction * 100).toFixed(0)} %`}
@@ -358,6 +348,31 @@ export function Sidebar({
           >
             {copied ? t.copied : t.copyConfig}
           </button>
+
+          {copyFailed && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <span style={{ fontSize: 11, color: "var(--orange)", lineHeight: 1.45 }}>{t.copyManual}</span>
+              <textarea
+                readOnly
+                value={configJson}
+                aria-label={t.copyConfig}
+                rows={6}
+                onFocus={(event) => event.target.select()}
+                autoFocus
+                className="mono"
+                style={{
+                  background: "var(--panel)",
+                  border: "1px solid var(--line)",
+                  borderRadius: 9,
+                  padding: "9px 11px",
+                  color: "var(--fg)",
+                  fontSize: 11.5,
+                  resize: "vertical",
+                  outline: "none",
+                }}
+              />
+            </div>
+          )}
 
           {/* A field rather than a clipboard read: pasting into it always works,
               where `navigator.clipboard.readText` needs a permission the browser

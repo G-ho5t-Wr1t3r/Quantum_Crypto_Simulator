@@ -265,6 +265,8 @@ function Trace({
           gap: 9,
           boxShadow: "inset 0 1px 0 var(--hi)",
           overflow: "hidden",
+          flex: 1,
+          justifyContent: "center",
         }}
       >
         {rows.map((row) => (
@@ -447,8 +449,177 @@ function Breakdown({ views, replay }: { views: Views; replay: Replay }) {
   );
 }
 
+/**
+ * Every repetition on one axis, so the spread is a picture rather than a sigma.
+ *
+ * This replaces the per-position trace when a run has more than one trial, and
+ * it has to: the views — what Alice prepared, what Eve touched, what Bob read —
+ * arrive with the **first trial only**. That is not an oversight in the
+ * interface but a deliberate line in the contract: at three thousand qubits one
+ * trial's views are already sixty kilobytes, and twenty of them would put well
+ * over a megabyte on the socket for a run nobody is going to read position by
+ * position.
+ *
+ * What every trial does carry is its own outcome, and that turns out to be the
+ * more useful thing to compare across repetitions. Trials exist to average, and
+ * an average is worth exactly as much as its scatter: one bar per trial against
+ * the same threshold shows whether the mean sits on a tight cluster or on two
+ * far apart, which is the question a single σ can only answer in the abstract.
+ */
+function TrialComparison({
+  trials,
+  isBB84,
+  threshold,
+  bound,
+  max,
+  mean,
+  spread,
+  replay,
+}: {
+  trials: TrialResult[];
+  isBB84: boolean;
+  threshold: number;
+  bound: number;
+  max: number;
+  mean: number;
+  spread: number;
+  replay: Replay;
+}) {
+  const t = useCopy();
+  const shown = revealed(trials.length, replay.sifting);
+
+  // Rows thin out as they multiply, so twenty fit in the space three occupy
+  // comfortably and the panel never grows past its neighbour.
+  const rowHeight = trials.length <= 6 ? 18 : trials.length <= 12 ? 13 : 10;
+  const pct = (value: number) => Math.min(100, Math.max(0, (value / max) * 100));
+  const rule = isBB84 ? threshold : bound;
+  const passes = (value: number) => (isBB84 ? value <= threshold : value >= bound);
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12, minWidth: 0 }}>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
+        <Kicker>{t.trialsTitle}</Kicker>
+        <span className="mono" style={{ fontSize: 10.5, color: "var(--fg-3)" }}>
+          {trials.length} × · {t.trialsSpread} σ {isBB84 ? `${(spread * 100).toFixed(2)} %` : spread.toFixed(3)}
+        </span>
+      </div>
+
+      <div
+        style={{
+          border: "1px solid var(--line)",
+          borderRadius: 14,
+          background: "var(--panel)",
+          padding: "16px 18px 14px",
+          display: "flex",
+          flexDirection: "column",
+          gap: 10,
+          boxShadow: "inset 0 1px 0 var(--hi)",
+          flex: 1,
+          justifyContent: "center",
+        }}
+      >
+        <div style={{ position: "relative", display: "flex", flexDirection: "column", gap: Math.max(3, rowHeight / 3) }}>
+          {/* The two rules the eye actually uses: where the decision sits, and
+              where the trials centre. Their distance is the margin. */}
+          <div
+            style={{
+              position: "absolute",
+              left: `${pct(rule).toFixed(2)}%`,
+              top: -4,
+              bottom: -4,
+              width: 0,
+              borderLeft: "1.5px dashed var(--red)",
+              zIndex: 3,
+            }}
+          />
+          <div
+            style={{
+              position: "absolute",
+              left: `${pct(mean).toFixed(2)}%`,
+              top: -4,
+              bottom: -4,
+              width: 0,
+              borderLeft: "1.5px solid var(--orange)",
+              opacity: 0.8,
+              zIndex: 3,
+            }}
+          />
+
+          {trials.map((trial, index) => {
+            const value = isBB84 ? trial.qber : (trial.chsh ?? 0);
+            const good = passes(value);
+            const text = isBB84 ? showPercent(value) : value.toFixed(3);
+            return (
+              <div
+                key={index}
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "42px minmax(0,1fr) 58px",
+                  alignItems: "center",
+                  gap: 8,
+                  opacity: index < shown ? 1 : 0,
+                  transition: "opacity .25s ease",
+                }}
+              >
+                <span className="mono" style={{ fontSize: 9.5, color: "var(--fg-3)", whiteSpace: "nowrap" }}>
+                  {t.trialLabel} {index + 1}
+                </span>
+                <div style={{ position: "relative", height: rowHeight, borderRadius: 3, background: "var(--seg)" }}>
+                  <div
+                    title={text}
+                    style={{
+                      position: "absolute",
+                      left: 0,
+                      top: 0,
+                      bottom: 0,
+                      width: `${Math.max(0.8, pct(value)).toFixed(2)}%`,
+                      borderRadius: 3,
+                      background: good ? "var(--mint)" : "var(--red)",
+                      transition: "width .5s cubic-bezier(.32,.72,0,1)",
+                    }}
+                  />
+                </div>
+                <span
+                  className="mono"
+                  style={{
+                    fontSize: 10,
+                    color: good ? "var(--mint)" : "var(--red)",
+                    textAlign: "right",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {text}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+
+        <div style={{ display: "flex", gap: 16, justifyContent: "center", paddingTop: 4 }}>
+          {[
+            { label: t.trialsMean, color: "var(--orange)", dashed: false },
+            { label: isBB84 ? t.threshold : "2 + kσ", color: "var(--red)", dashed: true },
+          ].map((entry) => (
+            <div key={entry.label} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span
+                style={
+                  entry.dashed
+                    ? { width: 14, height: 0, borderTop: `1.5px dashed ${entry.color}`, flex: "none" }
+                    : { width: 14, height: 2, background: entry.color, flex: "none" }
+                }
+              />
+              <span style={{ fontSize: 10.5, color: "var(--fg-3)" }}>{entry.label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function Results({
   result,
+  trials,
   first,
   isBB84,
   nQubits,
@@ -458,8 +629,10 @@ export function Results({
   stamp,
   replay,
 }: {
-  /** The aggregate, once the run is over. Null while it is still going. */
-  result: RunResult | null;
+  /** The aggregate. The section is not shown until it exists. */
+  result: RunResult;
+  /** Every repetition, for comparing them against each other. */
+  trials: TrialResult[];
   /** The first trial, the only one that carries the views. */
   first: TrialResult;
   isBB84: boolean;
@@ -473,12 +646,9 @@ export function Results({
   const t = useCopy();
   const locale = useLocale();
 
-  // Before the aggregate lands there is still one real trial to report; after
-  // it, the mean over all of them. Both are measurements, and the subtitle says
-  // which is on screen.
-  const qber = result?.qber_mean ?? first.qber;
-  const chsh = result?.chsh_mean ?? first.chsh;
-  const spread = result ? `σ ${(result.qber_stdev * 100).toFixed(2)} %` : "trial 1";
+  const qber = result.qber_mean;
+  const chsh = result.chsh_mean;
+  const spread = `σ ${(result.qber_stdev * 100).toFixed(2)} %`;
   const qberZ = first.qber_by_basis?.rectilinear ?? null;
   const qberX = first.qber_by_basis?.diagonal ?? null;
   const eveKnowledge = first.eavesdropper_knowledge ?? null;
@@ -593,9 +763,7 @@ export function Results({
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", minHeight: 34 }}>
-        {result && (
-          <>
-            <span
+        <span
               style={{
                 flex: "none",
                 whiteSpace: "nowrap",
@@ -610,21 +778,19 @@ export function Results({
                 boxShadow: "inset 0 1px 0 var(--hi)",
                 animation: "qrise .3s cubic-bezier(.32,.72,0,1) both",
               }}
-            >
-              {result.accepted ? t.keyAccepted : t.keyRejected}
-            </span>
-            {/* Shown verbatim: a rejection whose grounds are not stated is
-                indistinguishable from a bug. */}
-            <span className="mono" style={{ fontSize: 12.5, color: "var(--fg-2)" }}>
-              {result.reason}
-            </span>
-          </>
-        )}
+        >
+          {result.accepted ? t.keyAccepted : t.keyRejected}
+        </span>
+        {/* Shown verbatim: a rejection whose grounds are not stated is
+            indistinguishable from a bug. */}
+        <span className="mono" style={{ fontSize: 12.5, color: "var(--fg-2)" }}>
+          {result.reason}
+        </span>
         <span style={{ flex: 1 }} />
         <span className="mono" style={{ fontSize: 11, color: "var(--fg-3)" }}>
           {stamp}
         </span>
-        {result && runId && (
+        {runId && (
           <a
             className="mono"
             href={exportUrl(runId)}
@@ -679,11 +845,25 @@ export function Results({
             rule={chart.rule}
             zones={chart.zones}
             axisTitle={chart.axisTitle}
+            fill
           />
           <span style={{ fontSize: 11, color: "var(--fg-3)", lineHeight: 1.5 }}>{chart.caption}</span>
         </div>
 
-        {first.views && <Trace views={first.views} isBB84={isBB84} total={nQubits} replay={replay} />}
+        {trials.length > 1 ? (
+          <TrialComparison
+            trials={trials}
+            isBB84={isBB84}
+            threshold={threshold}
+            bound={chshBound ?? 2}
+            max={chart.max}
+            mean={isBB84 ? qber : (chsh ?? 0)}
+            spread={isBB84 ? result.qber_stdev : (result.chsh_stdev ?? 0)}
+            replay={replay}
+          />
+        ) : (
+          first.views && <Trace views={first.views} isBB84={isBB84} total={nQubits} replay={replay} />
+        )}
       </div>
 
       {first.views && <Breakdown views={first.views} replay={replay} />}

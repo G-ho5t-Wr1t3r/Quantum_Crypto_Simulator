@@ -9,11 +9,13 @@
  * exists to make.
  */
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import { ApiError } from "../../api/client";
+import { copyText } from "../../lib/clipboard";
 import { usePlugins } from "../../api/queries";
+import { useReducedMotion } from "../../app/appearance";
 import { useRun } from "../../api/useRun";
 import type { ProtocolKind } from "../../api/contract";
 import { useCopy, useLocale } from "../../i18n/useCopy";
@@ -39,7 +41,9 @@ export default function Configuration() {
   const plugins = usePlugins();
   const run = useRun();
   const config = useConfiguration(initialProtocol);
+  const reduced = useReducedMotion();
 
+  const scroller = useRef<HTMLElement>(null);
   const [copied, setCopied] = useState(false);
   const [refusal, setRefusal] = useState<string | null>(null);
   const [stamp, setStamp] = useState("");
@@ -49,8 +53,15 @@ export default function Configuration() {
 
   // Keyed on the run, so a second launch replays from the beginning instead of
   // continuing wherever the previous one stopped.
-  const replay = useReplay(first ? `${run.runId}` : null, run.isRunning);
-  const phase = run.result && replay.phase >= 4 ? 4 : replay.phase;
+  const replay = useReplay(run.result ? `${run.runId}` : null, run.isRunning);
+  /**
+   * One past the last stage once the verdict is in.
+   *
+   * The header marks a stage done when the phase is *past* it, so capping at 4
+   * left the verdict permanently "in progress": it lit blue and never turned
+   * green, however finished the run was.
+   */
+  const phase = run.result && replay.phase >= 4 ? t.phases.length : replay.phase;
 
   const launch = useCallback(async () => {
     setRefusal(null);
@@ -65,11 +76,7 @@ export default function Configuration() {
     config.setSelected(null);
 
     const channel =
-      config.params.channelKind === "ideal"
-        ? "ideal"
-        : config.params.channelMode === "gamma"
-          ? `γ=${config.gamma.toFixed(3)}`
-          : `L=${config.params.km} km`;
+      config.params.channelKind === "ideal" ? "ideal" : `γ=${config.gamma.toFixed(3)}`;
     setStamp(
       `${config.params.protocol} · seed ${config.params.seed} · n=${config.params.nQubits.toLocaleString(locale)}` +
         ` · trials=${config.params.trials} · ${channel}` +
@@ -90,10 +97,35 @@ export default function Configuration() {
     config.reset();
   }, [config, run]);
 
-  const copyConfig = useCallback(() => {
-    void navigator.clipboard?.writeText(JSON.stringify(config.apiConfig, null, 2)).catch(() => {});
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1800);
+  /**
+   * Carry the reader down to the summary when the replay finishes.
+   *
+   * The composition of the key sits below the fold on most screens, and it is
+   * the panel that says what the run actually produced — it was being missed
+   * entirely. Moving it up would push the trace off instead, so the page comes
+   * to it, once, at the moment there is something to see.
+   */
+  const done = !!run.result && replay.phase >= t.phases.length - 1;
+  useEffect(() => {
+    if (!done) return;
+    const element = scroller.current;
+    if (!element) return;
+    element.scrollTo({ top: element.scrollHeight, behavior: reduced ? "auto" : "smooth" });
+  }, [done, reduced]);
+
+  const [copyFailed, setCopyFailed] = useState(false);
+
+  const copyConfig = useCallback(async () => {
+    const json = JSON.stringify(config.apiConfig, null, 2);
+    if (await copyText(json)) {
+      setCopyFailed(false);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1800);
+      return;
+    }
+    // Nothing worked, so put the text where it can be selected instead of
+    // leaving a button that quietly does nothing.
+    setCopyFailed(true);
   }, [config.apiConfig]);
 
   const topology = plugins.data?.topologies[config.params.protocol];
@@ -102,7 +134,7 @@ export default function Configuration() {
   const channelLabel = useMemo(() => {
     const hops = topology?.links.filter((link) => link.kind === "quantum").length ?? 1;
     if (config.params.channelKind === "ideal") return `${t.channel}: ${t.ideal}`;
-    const km = config.params.channelMode === "length_km" ? config.params.km : lengthFromGamma(config.gamma);
+    const km = lengthFromGamma(config.gamma);
     return `${t.damping} · γ ${config.gamma.toFixed(3)} · L ${km.toFixed(1)} km · ${hops}× ${(km / hops).toFixed(1)} km`;
   }, [config.gamma, config.params, t, topology]);
 
@@ -119,12 +151,17 @@ export default function Configuration() {
         busy={run.isRunning}
         onRun={launch}
         onReset={reset}
-        onCopy={copyConfig}
+        onCopy={() => void copyConfig()}
         copied={copied}
+        copyFailed={copyFailed}
+        configJson={JSON.stringify(config.apiConfig, null, 2)}
         onLoad={config.load}
       />
 
-      <main style={{ display: "flex", flexDirection: "column", minWidth: 0, maxHeight: "100vh", overflowY: "auto" }}>
+      <main
+        ref={scroller}
+        style={{ display: "flex", flexDirection: "column", minWidth: 0, maxHeight: "100vh", overflowY: "auto" }}
+      >
         <header
           style={{
             display: "flex",
@@ -254,18 +291,24 @@ export default function Configuration() {
             layout that is coming, so the arrival of real data is a fill and not
             a rebuild — and it shimmers only while something is actually on its
             way. */}
-        {!first && (
+        {!run.result && (
           <ResultsSkeleton
             active={run.isRunning}
             title={run.isRunning ? t.workingTitle : t.awaitingTitle}
-            hint={run.isRunning ? t.workingHint : t.awaitingHint}
+            // While it runs, the only thing worth saying is how far along it is.
+            hint={
+              run.isRunning
+                ? `${t.trialLabel} ${Math.min(run.trials.length + 1, config.params.trials)} / ${config.params.trials}`
+                : t.awaitingHint
+            }
             cards={4}
           />
         )}
 
-        {first && (
+        {run.result && first && (
           <Results
             result={run.result}
+            trials={run.trials}
             first={first}
             isBB84={isBB84}
             nQubits={config.params.nQubits}

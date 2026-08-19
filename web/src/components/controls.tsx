@@ -76,12 +76,57 @@ export function Segmented<T extends string | null>({
   );
 }
 
+/** One step of the slider, for when dragging cannot land on the value wanted. */
+function Nudge({
+  direction,
+  onClick,
+  disabled,
+  label,
+}: {
+  direction: "down" | "up";
+  onClick: () => void;
+  disabled: boolean;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      style={{
+        width: 20,
+        height: 20,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: 0,
+        border: "1px solid var(--line)",
+        borderRadius: 6,
+        background: "var(--panel-2)",
+        color: disabled ? "var(--fg-3)" : "var(--fg-2)",
+        fontSize: 11,
+        lineHeight: 1,
+        cursor: disabled ? "default" : "pointer",
+        boxShadow: "inset 0 1px 0 var(--hi)",
+      }}
+    >
+      {direction === "down" ? "−" : "+"}
+    </button>
+  );
+}
+
 /**
  * A labelled slider with its value shown and a sentence explaining what it does.
  *
  * The hint is not decoration. Every one of these parameters means something
  * physical, and a number the reader cannot interpret is a number they cannot
  * defend.
+ *
+ * The two nudge buttons exist because a slider is good at "roughly here" and
+ * bad at "exactly this". Wanting 51 % rather than 50, or 0.81 rather than 0.80,
+ * is not an unusual thing to want — a run is meant to be reproducible, and a
+ * value you cannot land on is a run you cannot repeat.
  */
 export function Slider({
   label,
@@ -102,12 +147,24 @@ export function Slider({
   value: number;
   onChange: (value: number) => void;
 }) {
+  // Stepping in floating point drifts: 0.1 + 0.005 is not 0.105. Rounding to
+  // the grid the step defines keeps the value on it.
+  const nudge = (by: number) => {
+    const next = Math.min(max, Math.max(min, value + by * step));
+    const decimals = (String(step).split(".")[1] ?? "").length;
+    onChange(Number(next.toFixed(decimals)));
+  };
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 10 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
         <span style={{ fontSize: 13, color: "var(--fg-2)" }}>{label}</span>
-        <span className="mono" style={{ fontSize: 12.5, color: "var(--fg)" }}>
-          {display}
+        <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <Nudge direction="down" onClick={() => nudge(-1)} disabled={value <= min} label={`${label} −`} />
+          <span className="mono" style={{ fontSize: 12.5, color: "var(--fg)", whiteSpace: "nowrap" }}>
+            {display}
+          </span>
+          <Nudge direction="up" onClick={() => nudge(1)} disabled={value >= max} label={`${label} +`} />
         </span>
       </div>
       <input
@@ -119,7 +176,11 @@ export function Slider({
         value={value}
         onChange={(event) => onChange(parseFloat(event.target.value))}
       />
-      {hint && <span style={{ fontSize: 11, color: "var(--fg-3)", lineHeight: 1.45 }}>{hint}</span>}
+      {/* `pre-line`, so a hint that separates two thoughts onto two lines keeps
+          them there instead of running them together. */}
+      {hint && (
+        <span style={{ fontSize: 11, color: "var(--fg-3)", lineHeight: 1.45, whiteSpace: "pre-line" }}>{hint}</span>
+      )}
     </div>
   );
 }

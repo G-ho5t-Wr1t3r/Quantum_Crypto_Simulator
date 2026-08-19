@@ -64,6 +64,7 @@ export function BarChart({
   rule,
   zones,
   axisTitle,
+  fill = false,
 }: {
   series: Series[];
   max: number;
@@ -72,6 +73,8 @@ export function BarChart({
   rule: Rule;
   zones?: Zones;
   axisTitle: string;
+  /** Stretch to the height of the row, so a pair of charts line up. */
+  fill?: boolean;
 }) {
   const pct = (value: number) => Math.min(100, Math.max(0, (value / max) * 100));
   const rulePct = pct(rule.value);
@@ -89,6 +92,7 @@ export function BarChart({
         flexDirection: "column",
         gap: 10,
         boxShadow: "inset 0 1px 0 var(--hi)",
+        ...(fill ? { flex: 1, justifyContent: "center" } : null),
       }}
     >
       {zones && (

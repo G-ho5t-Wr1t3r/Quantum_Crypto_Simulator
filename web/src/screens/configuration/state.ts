@@ -13,17 +13,26 @@ import { useCallback, useMemo, useState } from "react";
 import type { ProtocolKind, SimulationConfig } from "../../api/contract";
 import { gammaFromLength } from "../../lib/physics";
 
-export type ChannelMode = "gamma" | "length_km";
-
 export interface Params {
   protocol: ProtocolKind;
   nQubits: number;
   trials: number;
   seed: number;
   channelKind: "ideal" | "amplitude_damping";
-  channelMode: ChannelMode;
+  /**
+   * The damping parameter, and the only way the channel is set here.
+   *
+   * γ and a fibre length are the same channel said twice, so offering a switch
+   * between them was offering a choice with no consequence — and the form then
+   * had to show the other number anyway, because it is the same setting. One
+   * control drives γ and reads out the length beside it.
+   *
+   * γ is the one that drives, not the length, because its range is bounded and
+   * evenly useful: 0…0.5 covers the first fifteen kilometres, which is where a
+   * link either works or does not. A slider in kilometres spends most of its
+   * travel above γ = 0.9, where every run fails identically.
+   */
   gamma: number;
-  km: number;
   attackKind: "none" | "intercept_resend";
   position: "channel" | "endpoint";
   fraction: number;
@@ -37,9 +46,7 @@ export const DEFAULT_PARAMS: Params = {
   trials: 1,
   seed: 20260818,
   channelKind: "amplitude_damping",
-  channelMode: "gamma",
   gamma: 0.08,
-  km: 25,
   attackKind: "intercept_resend",
   position: "channel",
   fraction: 0.5,
@@ -57,23 +64,18 @@ export function useConfiguration(initialProtocol: ProtocolKind) {
 
   const reset = useCallback(() => setParams({ ...DEFAULT_PARAMS }), []);
 
-  /** The damping actually in force, whichever way it was described. */
+  /** The damping actually in force; zero on an ideal line. */
   const gamma = useMemo(
-    () =>
-      params.channelKind === "ideal"
-        ? 0
-        : params.channelMode === "gamma"
-          ? params.gamma
-          : gammaFromLength(params.km),
+    () => (params.channelKind === "ideal" ? 0 : params.gamma),
     [params],
   );
 
   /**
    * The body of `POST /simulate`.
    *
-   * Exactly one of γ and length_km is ever sent: the backend rejects both, and
-   * sending the one the reader did not choose would silently rewrite what they
-   * asked for.
+   * γ is sent and the length never is: the backend refuses both together, and
+   * the two are the same channel, so there is nothing to lose by always naming
+   * it the same way.
    *
    * The security policy carries both fields whatever the protocol, because that
    * is the shape the backend validates. Which of the two it consults is the
@@ -85,9 +87,7 @@ export function useConfiguration(initialProtocol: ProtocolKind) {
     const channel =
       params.channelKind === "ideal"
         ? ({ kind: "ideal" } as const)
-        : params.channelMode === "gamma"
-          ? ({ kind: "amplitude_damping", gamma: Number(params.gamma.toFixed(4)) } as const)
-          : ({ kind: "amplitude_damping", length_km: params.km } as const);
+        : ({ kind: "amplitude_damping", gamma: Number(params.gamma.toFixed(4)) } as const);
 
     return {
       protocol: params.protocol,
@@ -145,12 +145,13 @@ export function useConfiguration(initialProtocol: ProtocolKind) {
       trials: number(body.trials, current.trials),
       seed: number(body.seed, current.seed),
       channelKind: channel?.kind === "ideal" || channel?.kind === "amplitude_damping" ? channel.kind : current.channelKind,
-      // Whichever of the two descriptions the JSON used is the one the form
-      // then shows, so a run configured in kilometres comes back in kilometres.
-      channelMode:
-        channel?.length_km != null ? "length_km" : channel?.gamma != null ? "gamma" : current.channelMode,
-      gamma: number(channel?.gamma, current.gamma),
-      km: number(channel?.length_km, current.km),
+      // A pasted configuration may describe the channel either way, because the
+      // backend accepts both. A length is converted rather than refused: it is
+      // the same channel, and rejecting a valid body would be pedantry.
+      gamma:
+        channel?.length_km != null
+          ? gammaFromLength(channel.length_km)
+          : number(channel?.gamma, current.gamma),
       attackKind:
         attack?.kind === "none" || attack?.kind === "intercept_resend" ? attack.kind : current.attackKind,
       position: attack?.position === "endpoint" || attack?.position === "channel" ? attack.position : current.position,
