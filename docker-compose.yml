@@ -1,0 +1,36 @@
+services:
+  api:
+    build: .
+    expose:
+      - "8000"
+    environment:
+      # Read from .env 
+      QKD_MAX_CONCURRENT_RUNS: ${QKD_MAX_CONCURRENT_RUNS:-5}
+      QKD_RUN_HISTORY: ${QKD_RUN_HISTORY:-20}
+      QKD_MAX_SYNC_QUBITS: ${QKD_MAX_SYNC_QUBITS:-200}
+    healthcheck:
+      # Tests if the socket is open using the local interpeter instead of image
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/plugins').read()"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      # Qiskit is slow to import; without this the first few probes would fail
+      # on a container that is perfectly healthy and merely still starting.
+      start_period: 40s
+    restart: unless-stopped
+
+  web:
+    build: ./web
+    ports:
+      # The engine is not published, so this is the only way in. 8000 is also
+      # the port uvicorn uses when run directly for development: the two never
+      # run together, but a stray dev server will hold it and stop this starting.
+      - "${QKD_PORT:-8000}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
