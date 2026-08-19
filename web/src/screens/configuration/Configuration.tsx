@@ -1,13 +1,15 @@
 /**
- * The main tool: build the network, run it, read the result in place.
+ * The main tool: configure the run, watch it, read the result in place.
  *
- * The whiteboard does not hand over to a separate results page — it becomes the
- * simulation view where it stands, and the panels rise in underneath. The run
- * being watched is the network that was just drawn, and moving that to another
- * screen would break the connection the screen exists to make.
+ * The network above is a depiction of what is configured, not a canvas — it is
+ * drawn from the topology the backend declares, so it always shows the run that
+ * would actually happen. Below it the result builds up as the trial is replayed,
+ * in the same view: moving that to another screen would break the connection
+ * between the picture and the numbers, which is the connection the screen
+ * exists to make.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import { ApiError } from "../../api/client";
@@ -16,23 +18,17 @@ import { useRun } from "../../api/useRun";
 import type { ProtocolKind } from "../../api/contract";
 import { useCopy, useLocale } from "../../i18n/useCopy";
 import { lengthFromGamma, MIN_E91_PAIRS } from "../../lib/physics";
-import { ALL_ROLES, ROLE_COLOR } from "../../lib/roles";
+import { ROLE_COLOR, type Role } from "../../lib/roles";
+import { ResultsSkeleton } from "../../components/Skeleton";
 import { Inspector } from "./Inspector";
+import { NetworkDiagram } from "./NetworkDiagram";
 import { Results } from "./Results";
 import { Sidebar } from "./Sidebar";
 import { useConfiguration } from "./state";
-import { Whiteboard } from "./Whiteboard";
+import { useReplay } from "./useReplay";
 
-/**
- * How long each phase of the replay is held.
- *
- * The engine does not stream the phases — a trial runs synchronously and one
- * event covers the whole of it — so the interface paces preparation, transit,
- * sifting and estimation itself. The verdict is the exception: it waits for the
- * real result, however long that takes, because it is the only phase that
- * reports something rather than illustrating it.
- */
-const PHASE_MS = [1500, 900, 1500, 1000];
+/** How much vertical room the network gets; the result takes the rest. */
+const DIAGRAM_HEIGHT = 360;
 
 export default function Configuration() {
   const t = useCopy();
@@ -44,42 +40,17 @@ export default function Configuration() {
   const run = useRun();
   const config = useConfiguration(initialProtocol);
 
-  const [linkMode, setLinkMode] = useState(false);
-  const [pending, setPending] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
   const [refusal, setRefusal] = useState<string | null>(null);
-  const [phase, setPhase] = useState(-1);
   const [stamp, setStamp] = useState("");
-  const timers = useRef<number[]>([]);
 
   const isBB84 = config.params.protocol === "bb84";
+  const first = run.trials[0];
 
-  const clearTimers = useCallback(() => {
-    timers.current.forEach(clearTimeout);
-    timers.current = [];
-  }, []);
-  useEffect(() => clearTimers, [clearTimers]);
-
-  // The verdict phase is reached by the result arriving, not by a timer.
-  useEffect(() => {
-    if (run.result) setPhase(PHASE_MS.length);
-  }, [run.result]);
-
-  const onSelect = useCallback(
-    (id: number) => {
-      if (!linkMode) {
-        config.setSelected(id);
-        return;
-      }
-      if (pending === null) {
-        setPending(id);
-        return;
-      }
-      if (pending !== id) config.connect(pending, id);
-      setPending(null);
-    },
-    [config, linkMode, pending],
-  );
+  // Keyed on the run, so a second launch replays from the beginning instead of
+  // continuing wherever the previous one stopped.
+  const replay = useReplay(first ? `${run.runId}` : null, run.isRunning);
+  const phase = run.result && replay.phase >= 4 ? 4 : replay.phase;
 
   const launch = useCallback(async () => {
     setRefusal(null);
@@ -91,10 +62,7 @@ export default function Configuration() {
       return;
     }
 
-    clearTimers();
-    setPhase(0);
     config.setSelected(null);
-    setLinkMode(false);
 
     const channel =
       config.params.channelKind === "ideal"
@@ -108,63 +76,52 @@ export default function Configuration() {
         (config.params.attackKind !== "none" ? ` · F=${config.params.fraction.toFixed(2)}` : ""),
     );
 
-    let elapsed = 0;
-    PHASE_MS.forEach((ms, index) => {
-      elapsed += ms;
-      timers.current.push(
-        window.setTimeout(() => setPhase((current) => Math.max(current, index + 1)), elapsed),
-      );
-    });
-
     try {
       await run.launch(config.apiConfig);
     } catch (error) {
-      clearTimers();
-      setPhase(-1);
       if (error instanceof ApiError) setRefusal(error.isBusy ? t.busy : error.detail);
       else setRefusal(String(error));
     }
-  }, [clearTimers, config, isBB84, locale, run, t]);
+  }, [config, isBB84, locale, run, t]);
 
   const reset = useCallback(() => {
-    clearTimers();
-    setPhase(-1);
     setRefusal(null);
     run.reset();
-    config.setParams((current) => ({ ...current, ...{} }));
-  }, [clearTimers, config, run]);
+    config.reset();
+  }, [config, run]);
 
   const copyConfig = useCallback(() => {
     void navigator.clipboard?.writeText(JSON.stringify(config.apiConfig, null, 2)).catch(() => {});
     setCopied(true);
-    timers.current.push(window.setTimeout(() => setCopied(false), 1800));
+    window.setTimeout(() => setCopied(false), 1800);
   }, [config.apiConfig]);
 
-  const channelLabel = useMemo(() => {
-    const hops = Math.max(1, config.links.length);
-    if (config.params.channelKind === "ideal") {
-      return `${t.channel}: ${t.ideal} · ${hops}×`;
-    }
-    const km = config.params.channelMode === "length_km" ? config.params.km : lengthFromGamma(config.gamma);
-    return `${t.damping} · γ ${config.gamma.toFixed(3)} · L ${km.toFixed(1)} km · ${hops}×${(km / hops).toFixed(1)} km`;
-  }, [config.gamma, config.links.length, config.params, t]);
+  const topology = plugins.data?.topologies[config.params.protocol];
+  const attacking = config.params.attackKind !== "none";
 
-  const selectedNode = config.nodes.find((node) => node.id === config.selected);
-  const first = run.trials[0];
+  const channelLabel = useMemo(() => {
+    const hops = topology?.links.filter((link) => link.kind === "quantum").length ?? 1;
+    if (config.params.channelKind === "ideal") return `${t.channel}: ${t.ideal}`;
+    const km = config.params.channelMode === "length_km" ? config.params.km : lengthFromGamma(config.gamma);
+    return `${t.damping} · γ ${config.gamma.toFixed(3)} · L ${km.toFixed(1)} km · ${hops}× ${(km / hops).toFixed(1)} km`;
+  }, [config.gamma, config.params, t, topology]);
+
+  const selectedRole: Role | null = config.selected
+    ? ((config.selected in ROLE_COLOR ? config.selected : "relay") as Role)
+    : null;
 
   return (
     <div style={{ minHeight: "100vh", display: "grid", gridTemplateColumns: "352px 1fr", background: "var(--bg)" }}>
       <Sidebar
         params={config.params}
         set={config.set}
-        preset={config.preset}
-        applyPreset={config.applyPreset}
         plugins={plugins.data}
         busy={run.isRunning}
         onRun={launch}
         onReset={reset}
         onCopy={copyConfig}
         copied={copied}
+        onLoad={config.load}
       />
 
       <main style={{ display: "flex", flexDirection: "column", minWidth: 0, maxHeight: "100vh", overflowY: "auto" }}>
@@ -187,7 +144,7 @@ export default function Configuration() {
               {isBB84 ? "BB84" : "E91"}
             </h1>
             <span style={{ fontSize: 12.5, color: "var(--fg-3)" }}>
-              {phase >= PHASE_MS.length ? t.subDone : t.subIdle}
+              {phase >= 4 ? t.subDone : t.subIdle}
             </span>
           </div>
 
@@ -251,133 +208,72 @@ export default function Configuration() {
           </div>
         </header>
 
-        <Whiteboard
-          nodes={config.nodes}
-          links={config.links}
-          selected={config.selected}
-          linkMode={linkMode}
-          pending={pending}
+        <NetworkDiagram
+          topology={topology}
+          showEve={attacking}
           running={run.isRunning}
-          onSelect={onSelect}
-          onMove={config.moveNode}
+          selected={config.selected}
+          onSelect={(id) => config.setSelected(config.selected === id ? null : id)}
           channelLabel={channelLabel}
+          height={DIAGRAM_HEIGHT}
         >
-          <div
-            style={{
-              position: "absolute",
-              top: 18,
-              left: 24,
-              display: "flex",
-              flexDirection: "column",
-              gap: 9,
-              zIndex: 4,
-              maxWidth: 262,
-            }}
-          >
+          {(plugins.isError || refusal || run.error) && (
             <div
               style={{
-                display: "flex",
-                flexWrap: "wrap",
-                gap: 4,
-                padding: 4,
-                background: "var(--panel)",
-                border: "1px solid var(--line)",
-                borderRadius: 12,
-                boxShadow: "0 14px 30px -20px #000, inset 0 1px 0 var(--hi)",
+                position: "absolute",
+                bottom: 14,
+                left: 20,
+                right: 20,
+                maxWidth: 520,
+                padding: "9px 13px",
+                borderRadius: 10,
+                border: "1px solid color-mix(in oklab, var(--red) 40%, transparent)",
+                background: "color-mix(in oklab, var(--red) 12%, var(--panel))",
+                color: "var(--red)",
+                fontSize: 11.5,
+                lineHeight: 1.5,
+                zIndex: 5,
               }}
             >
-              {ALL_ROLES.map((role) => (
-                <button
-                  key={role}
-                  type="button"
-                  onClick={() => config.addNode(role)}
-                  style={{
-                    padding: "6px 10px",
-                    fontSize: 11.5,
-                    border: "1px solid var(--line)",
-                    borderRadius: 8,
-                    background: "var(--panel-2)",
-                    color: ROLE_COLOR[role],
-                    cursor: "pointer",
-                    whiteSpace: "nowrap",
-                    boxShadow: "inset 0 1px 0 var(--hi)",
-                  }}
-                >
-                  + {t.roles[role]}
-                </button>
-              ))}
+              {plugins.isError ? t.backendDown : `${t.refused}: ${refusal ?? run.error}`}
             </div>
-            <div style={{ display: "flex", gap: 6 }}>
-              <button
-                type="button"
-                onClick={() => {
-                  setLinkMode((on) => !on);
-                  setPending(null);
-                  config.setSelected(null);
-                }}
-                style={{
-                  padding: "7px 12px",
-                  fontSize: 11.5,
-                  border: `1px solid ${linkMode ? "transparent" : "var(--line)"}`,
-                  borderRadius: 9,
-                  background: linkMode ? "var(--blue)" : "var(--panel-2)",
-                  color: linkMode ? "#fff" : "var(--fg-2)",
-                  cursor: "pointer",
-                  boxShadow: "inset 0 1px 0 var(--hi)",
-                }}
-              >
-                {linkMode ? t.linkModeOn : t.linkMode}
-              </button>
-              <button
-                type="button"
-                onClick={() => config.applyPreset("blank")}
-                style={{
-                  padding: "7px 12px",
-                  fontSize: 11.5,
-                  border: "1px solid var(--line)",
-                  borderRadius: 9,
-                  background: "var(--panel-2)",
-                  color: "var(--fg-2)",
-                  cursor: "pointer",
-                  boxShadow: "inset 0 1px 0 var(--hi)",
-                }}
-              >
-                {t.clear}
-              </button>
-            </div>
-            <span style={{ fontSize: 11, color: "var(--fg-3)", lineHeight: 1.5 }}>
-              {linkMode ? t.hintLink : t.hintIdle}
-            </span>
-            {plugins.isError && (
-              <span style={{ fontSize: 11, color: "var(--red)", lineHeight: 1.5 }}>{t.backendDown}</span>
-            )}
-            {(refusal || run.error) && (
-              <span style={{ fontSize: 11, color: "var(--red)", lineHeight: 1.5 }}>
-                {t.refused}: {refusal ?? run.error}
-              </span>
-            )}
-          </div>
+          )}
 
-          {selectedNode && (
+          {selectedRole && (
             <Inspector
-              role={selectedNode.role}
+              role={selectedRole}
               views={first?.views ?? null}
               isBB84={isBB84}
               onClose={() => config.setSelected(null)}
-              onRemove={() => config.removeNode(selectedNode.id)}
             />
           )}
-        </Whiteboard>
+        </NetworkDiagram>
 
-        {run.result && (
+        {/* The results area is the largest surface here, and an empty one read as
+            a broken page rather than an idle one. The skeleton holds the exact
+            layout that is coming, so the arrival of real data is a fill and not
+            a rebuild — and it shimmers only while something is actually on its
+            way. */}
+        {!first && (
+          <ResultsSkeleton
+            active={run.isRunning}
+            title={run.isRunning ? t.workingTitle : t.awaitingTitle}
+            hint={run.isRunning ? t.workingHint : t.awaitingHint}
+            cards={4}
+          />
+        )}
+
+        {first && (
           <Results
             result={run.result}
             first={first}
             isBB84={isBB84}
             nQubits={config.params.nQubits}
             threshold={config.params.qberThreshold}
+            confidence={config.params.chshConfidence}
             runId={run.runId}
             stamp={stamp}
+            replay={replay}
           />
         )}
       </main>

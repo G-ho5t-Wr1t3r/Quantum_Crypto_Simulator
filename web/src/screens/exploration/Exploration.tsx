@@ -21,8 +21,10 @@ import { useRun } from "../../api/useRun";
 import { LangSwitch, ThemeSwitch } from "../../components/AppearanceControls";
 import { Footer } from "../../components/Footer";
 import { Kicker, RunButton, Segmented, Slider } from "../../components/controls";
+import { Banner } from "../../components/Banner";
+import { ChartSkeleton, ReadoutsSkeleton } from "../../components/Skeleton";
 import { LineChart } from "../../components/LineChart";
-import { useAppearance } from "../../app/appearance";
+import { usePlugins } from "../../api/queries";
 import { useCopy, useLocale } from "../../i18n/useCopy";
 import { download, downloadPng, downloadSvg } from "../../lib/download";
 import { CLASSICAL_BOUND, MIN_E91_PAIRS, TSIRELSON } from "../../lib/physics";
@@ -41,8 +43,10 @@ const THRESHOLD = 0.11;
 export default function Exploration() {
   const t = useCopy();
   const locale = useLocale();
-  const { theme } = useAppearance();
   const run = useRun();
+  // Only to know whether the engine is there. The answer is cached, so asking
+  // on every tool screen costs one request for the whole session.
+  const backend = usePlugins();
 
   const [protocol, setProtocol] = useState<ProtocolKind>("bb84");
   const [axis, setAxis] = useState<SweepAxis>("gamma");
@@ -470,7 +474,16 @@ export default function Exploration() {
             <Kicker>{t.exportLabel}</Kicker>
             <div style={{ display: "flex", gap: 6 }}>
               {[
-                { label: "PNG", action: () => svgRef.current && downloadPng(svgRef.current, `sweep_${key}.png`, theme === "dark" ? "#0b0b0e" : "#ffffff") },
+                {
+                  label: "PNG",
+                  action: () =>
+                    svgRef.current &&
+                    downloadPng(
+                      svgRef.current,
+                      `sweep_${key}.png`,
+                      getComputedStyle(document.documentElement).getPropertyValue("--plot").trim() || "#ffffff",
+                    ),
+                },
                 { label: "SVG", action: () => svgRef.current && downloadSvg(svgRef.current, `sweep_${key}.svg`) },
                 { label: "CSV", action: exportCsv },
               ].map((button) => (
@@ -501,6 +514,8 @@ export default function Exploration() {
         </aside>
 
         <main style={{ padding: 22, display: "flex", flexDirection: "column", gap: 18, minWidth: 0 }}>
+          {backend.isError && <Banner tone="error">{t.backendDown}</Banner>}
+
           <section
             style={{
               display: "flex",
@@ -538,6 +553,9 @@ export default function Exploration() {
             </div>
 
             <div ref={plotHost}>
+              {done === 0 ? (
+                <ChartSkeleton active={run.isRunning} />
+              ) : (
               <LineChart
                 ref={svgRef}
                 xs={xs}
@@ -558,6 +576,7 @@ export default function Exploration() {
                 width={plotWidth}
                 acceptFill={isBB84 ? "var(--mint)" : "var(--blue)"}
               />
+              )}
             </div>
 
             <span style={{ fontSize: 12, lineHeight: 1.6, color: "var(--fg-3)", maxWidth: "96ch" }}>
@@ -566,7 +585,8 @@ export default function Exploration() {
           </section>
 
           <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 14 }}>
-            {[
+            {done === 0 && <ReadoutsSkeleton active={run.isRunning} />}
+            {done > 0 && [
               {
                 label: t.crossing,
                 value:

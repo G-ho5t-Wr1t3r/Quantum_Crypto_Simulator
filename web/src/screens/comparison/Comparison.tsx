@@ -25,6 +25,9 @@ import { LangSwitch, ThemeSwitch } from "../../components/AppearanceControls";
 import { BarChart } from "../../components/BarChart";
 import { Footer } from "../../components/Footer";
 import { Chip, Kicker, RunButton, Segmented, Slider } from "../../components/controls";
+import { Banner } from "../../components/Banner";
+import { SideSkeleton } from "../../components/Skeleton";
+import { usePlugins } from "../../api/queries";
 import { Sphere } from "../../components/Sphere";
 import { useCopy } from "../../i18n/useCopy";
 import { measured } from "../../lib/nullable";
@@ -214,6 +217,7 @@ export default function Comparison() {
   const t = useCopy();
   const noise = useRun();
   const attack = useRun();
+  const backend = usePlugins();
 
   const [targetPct, setTargetPct] = useState(11);
   const [split, setSplit] = useState(true);
@@ -322,6 +326,14 @@ export default function Comparison() {
       </header>
 
       <main style={{ padding: 26, display: "flex", flexDirection: "column", gap: 22, maxWidth: 1500, margin: "0 auto" }}>
+        {backend.isError && <Banner tone="error">{t.backendDown}</Banner>}
+
+        {/* Stated rather than left to be discovered: someone arriving from E91
+            has no way of knowing this screen does not apply to it. */}
+        <Banner tone="notice">
+          <strong>{t.bb84Only}</strong> — {t.bb84OnlyWhy}
+        </Banner>
+
         <section
           style={{
             display: "flex",
@@ -526,6 +538,7 @@ export default function Comparison() {
 
                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                   <Kicker>{split ? t.chartSplit : t.chartMean}</Kicker>
+                  {bars.length === 0 && <SideSkeleton active={busy} bars={split ? 2 : 1} />}
                   {bars.length > 0 && (
                     <BarChart
                       series={bars}

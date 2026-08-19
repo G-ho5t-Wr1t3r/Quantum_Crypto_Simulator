@@ -1,39 +1,38 @@
 /**
- * What the run produced: the readouts, the chart, and the per-position trace.
+ * What the run produced, built up as it is replayed.
  *
  * Every number here comes from the engine. Nothing is recomputed client-side,
  * because a second implementation of the physics is a second thing that can be
  * wrong — and the one on screen would be the one nobody tested.
+ *
+ * The section appears as soon as the first trial lands rather than waiting for
+ * the aggregate, and fills in stage by stage: Alice's row, then Eve's, then
+ * Bob's, then the outcome of the sifting, then the readouts. The verdict is the
+ * exception and waits for the real result, because it is the only part that
+ * reports something instead of illustrating it.
  */
 
 import { useLayoutEffect, useRef, useState } from "react";
 
 import { BarChart } from "../../components/BarChart";
+import { Skeleton } from "../../components/Skeleton";
 import { Kicker } from "../../components/controls";
 import { exportUrl } from "../../api/client";
 import type { RunResult, TrialResult, Views } from "../../api/contract";
 import { useCopy, useLocale } from "../../i18n/useCopy";
 import { measured, showPercent } from "../../lib/nullable";
 import { TSIRELSON } from "../../lib/physics";
+import { revealed, type Replay } from "./useReplay";
 
-const CARD_NUMBER = {
-  fontSize: 23,
-  fontWeight: 500,
-  letterSpacing: "-.02em",
-} as const;
-
-function Card({
-  label,
-  value,
-  sub,
-  color,
-}: {
+interface CardSpec {
   label: string;
   value: string;
   sub: string;
-  /** Absent for a value that was never measured, which prints greyed. */
+  /** Absent where the value was never measured, which prints greyed. */
   color?: string;
-}) {
+}
+
+function Card({ label, value, sub, color }: CardSpec) {
   return (
     <div
       style={{
@@ -61,7 +60,12 @@ function Card({
       </span>
       <span
         className="mono"
-        style={{ ...CARD_NUMBER, color: color ?? "var(--fg-3)", fontWeight: color ? 500 : 400 }}
+        style={{
+          fontSize: 23,
+          fontWeight: color ? 500 : 400,
+          letterSpacing: "-.02em",
+          color: color ?? "var(--fg-3)",
+        }}
       >
         {value}
       </span>
@@ -78,28 +82,20 @@ function Card({
  */
 function useTraceWidth(): [React.RefObject<HTMLDivElement | null>, number] {
   const ref = useRef<HTMLDivElement>(null);
-  const [count, setCount] = useState(26);
+  const [count, setCount] = useState(30);
   useLayoutEffect(() => {
     const element = ref.current;
     if (!element) return;
-    const measureWidth = () => {
+    const measure = () => {
       const width = element.clientWidth;
-      setCount(width < 420 ? 12 : width < 640 ? 18 : 26);
+      setCount(width < 460 ? 14 : width < 700 ? 22 : width < 1000 ? 30 : 40);
     };
-    measureWidth();
-    const observer = new ResizeObserver(measureWidth);
+    measure();
+    const observer = new ResizeObserver(measure);
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
   return [ref, count];
-}
-
-interface CardSpec {
-  label: string;
-  value: string;
-  sub: string;
-  /** Absent where the value was never measured, which prints greyed. */
-  color?: string;
 }
 
 interface CellSpec {
@@ -108,6 +104,17 @@ interface CellSpec {
   color: string;
   dim: boolean;
   title: string;
+}
+
+/**
+ * A position the replay has not reached yet.
+ *
+ * Shown as a shimmering placeholder rather than an empty outline: the value
+ * exists and is on its way, and a dashed hole would read as data that is
+ * missing instead of data that has not been drawn yet.
+ */
+function PendingCell() {
+  return <Skeleton width={0} height={30} radius={5} style={{ flex: "1 1 0" }} />;
 }
 
 function TraceCell({ cell }: { cell: CellSpec }) {
@@ -120,11 +127,14 @@ function TraceCell({ cell }: { cell: CellSpec }) {
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
+        height: 30,
         padding: "3px 0 2px",
         borderRadius: 5,
         border: `1px solid ${cell.dim ? "var(--line)" : `color-mix(in oklab, ${cell.color} 42%, transparent)`}`,
         background: cell.dim ? "var(--seg)" : `color-mix(in oklab, ${cell.color} 16%, var(--panel-2))`,
-        transition: "background .5s ease, border-color .5s ease",
+        // Each cell arrives rather than appears: the row reads as being written
+        // left to right, which is the order the qubits actually went in.
+        animation: "qrise .22s cubic-bezier(.32,.72,0,1) both",
       }}
     >
       <span
@@ -153,7 +163,17 @@ function TraceCell({ cell }: { cell: CellSpec }) {
  * aggregate numbers above are what this adds up to; this is where they come
  * from.
  */
-function Trace({ views, isBB84, total }: { views: Views; isBB84: boolean; total: number }) {
+function Trace({
+  views,
+  isBB84,
+  total,
+  replay,
+}: {
+  views: Views;
+  isBB84: boolean;
+  total: number;
+  replay: Replay;
+}) {
   const t = useCopy();
   const locale = useLocale();
   const [ref, count] = useTraceWidth();
@@ -174,11 +194,12 @@ function Trace({ views, isBB84, total }: { views: Views; isBB84: boolean; total:
     return value ? "⤢" : "↕";
   };
 
-  const rows: { name: string; field: string; color: string; cells: CellSpec[] }[] = [
+  const rows: { name: string; field: string; color: string; cells: CellSpec[]; upTo: number }[] = [
     {
       name: t.roles.alice,
       field: isBB84 ? t.fieldABB : t.fieldAE91,
       color: "var(--blue)",
+      upTo: revealed(count, replay.alice),
       cells: aliceValues.map((value, index) => ({
         bit: String(value),
         meta: basisLabel(aliceBases[index]),
@@ -194,6 +215,7 @@ function Trace({ views, isBB84, total }: { views: Views; isBB84: boolean; total:
       name: t.roles.eve,
       field: t.fieldEve,
       color: "var(--red)",
+      upTo: revealed(count, replay.eve),
       cells: eveBases.map((basis) => ({
         // Null is the whole point of this row: it says exactly which qubits she
         // let past, which the aggregate error rate cannot say.
@@ -210,6 +232,7 @@ function Trace({ views, isBB84, total }: { views: Views; isBB84: boolean; total:
     name: t.roles.bob,
     field: isBB84 ? t.fieldBBB : t.fieldBE91,
     color: "var(--mint)",
+    upTo: revealed(count, replay.bob),
     cells: bobValues.map((value, index) => ({
       bit: String(value),
       meta: basisLabel(bobBases[index]),
@@ -218,6 +241,8 @@ function Trace({ views, isBB84, total }: { views: Views; isBB84: boolean; total:
       title: `${t.roles.bob}: ${value}`,
     })),
   });
+
+  const siftedUpTo = revealed(count, replay.sifting);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12, minWidth: 0 }}>
@@ -256,9 +281,9 @@ function Trace({ views, isBB84, total }: { views: Views; isBB84: boolean; total:
               </span>
             </div>
             <div style={{ display: "flex", gap: 2, minWidth: 0 }}>
-              {row.cells.map((cell, index) => (
-                <TraceCell key={index} cell={cell} />
-              ))}
+              {row.cells.map((cell, index) =>
+                index < row.upTo ? <TraceCell key={index} cell={cell} /> : <PendingCell key={index} />,
+              )}
             </div>
           </div>
         ))}
@@ -276,8 +301,13 @@ function Trace({ views, isBB84, total }: { views: Views; isBB84: boolean; total:
           <span className="mono" style={{ fontSize: 9.5, color: "var(--fg-3)", lineHeight: 1.3 }}>
             {t.traceOutcome}
           </span>
-          <div style={{ display: "flex", gap: 2, minWidth: 0 }}>
+          <div style={{ display: "flex", gap: 2, minWidth: 0, height: 16, alignItems: "center" }}>
             {survived.map((kept, index) => {
+              if (index >= siftedUpTo) {
+                return (
+                  <Skeleton key={index} width={0} height={8} radius={3} style={{ flex: "1 1 0" }} />
+                );
+              }
               const wrong = kept && aliceValues[index] !== bobValues[index];
               const color = !kept ? "var(--line-2)" : wrong ? "var(--red)" : "var(--blue)";
               return (
@@ -294,7 +324,7 @@ function Trace({ views, isBB84, total }: { views: Views; isBB84: boolean; total:
                     borderRadius: 3,
                     background: color,
                     boxShadow: kept ? `0 0 8px -3px ${color}` : "none",
-                    transition: "height .6s cubic-bezier(.32,.72,0,1), background .6s ease",
+                    transition: "height .3s cubic-bezier(.32,.72,0,1), background .3s ease",
                   }}
                 />
               );
@@ -308,7 +338,7 @@ function Trace({ views, isBB84, total }: { views: Views; isBB84: boolean; total:
           { label: t.keptLabel, color: "var(--blue)" },
           { label: t.errorLabel, color: "var(--red)" },
           { label: t.droppedLabel, color: "var(--line-2)" },
-          { label: t.interceptedLabel, color: "var(--orange)" },
+          ...(eveBases ? [{ label: t.interceptedLabel, color: "var(--orange)" }] : []),
         ].map((entry) => (
           <div key={entry.label} style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <span style={{ width: 9, height: 9, borderRadius: 2, background: entry.color, flex: "none" }} />
@@ -320,48 +350,159 @@ function Trace({ views, isBB84, total }: { views: Views; isBB84: boolean; total:
   );
 }
 
+/**
+ * What the key is made of, in counts.
+ *
+ * The trace shows a window of positions; this is the whole of them. Both are
+ * needed: one says what happens to a qubit, the other says how much of the run
+ * ends up where — and a ratio of 0.5 means nothing until it is two thousand
+ * positions out of four.
+ *
+ * Counted from the views rather than taken from a field, because the engine
+ * reports the ratio and the total but not the split, and re-deriving it here
+ * from the same arrays the trace draws keeps the two from disagreeing.
+ */
+function Breakdown({ views, replay }: { views: Views; replay: Replay }) {
+  const t = useCopy();
+  const locale = useLocale();
+
+  const total = views.survived_sifting.length;
+  const aliceValues = views.alice.bits ?? views.alice.outcomes ?? [];
+  const bobValues = views.bob.outcomes ?? [];
+
+  let kept = 0;
+  let wrong = 0;
+  for (let index = 0; index < total; index++) {
+    if (!views.survived_sifting[index]) continue;
+    kept += 1;
+    if (aliceValues[index] !== bobValues[index]) wrong += 1;
+  }
+  const dropped = total - kept;
+  const touched = views.eve?.bases?.filter((basis) => basis !== null).length ?? null;
+
+  const rows: { label: string; count: number; color: string }[] = [
+    { label: t.keptLabel, count: kept - wrong, color: "var(--blue)" },
+    { label: t.errorLabel, count: wrong, color: "var(--red)" },
+    { label: t.droppedLabel, count: dropped, color: "var(--line-2)" },
+  ];
+  if (touched !== null) rows.push({ label: t.interceptedLabel, count: touched, color: "var(--orange)" });
+
+  const share = (count: number) => (total ? (count / total) * 100 : 0);
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 12,
+        opacity: replay.sifting,
+        transition: "opacity .3s ease",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
+        <Kicker>{t.breakdownTitle}</Kicker>
+        <span className="mono" style={{ fontSize: 10.5, color: "var(--fg-3)" }}>
+          {total.toLocaleString(locale)} {t.sentLabel} · {t.breakdownOf}
+        </span>
+      </div>
+
+      {/* One bar, divided: the parts are shares of the same whole, and three
+          separate bars would invite reading them against each other instead. */}
+      <div style={{ display: "flex", height: 14, borderRadius: 4, overflow: "hidden", background: "var(--seg)" }}>
+        {rows.map((row) => (
+          <span
+            key={row.label}
+            title={`${row.label}: ${row.count}`}
+            style={{
+              width: `${share(row.count).toFixed(2)}%`,
+              background: row.color,
+              transition: "width .5s cubic-bezier(.32,.72,0,1)",
+            }}
+          />
+        ))}
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 10 }}>
+        {rows.map((row) => (
+          <div key={row.label} style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ width: 9, height: 9, borderRadius: 2, background: row.color, flex: "none" }} />
+              <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{row.label}</span>
+            </div>
+            <span className="mono" style={{ fontSize: 15, fontWeight: 600, color: "var(--fg)" }}>
+              {row.count.toLocaleString(locale)}
+            </span>
+            <span className="mono" style={{ fontSize: 10.5, color: "var(--fg-3)" }}>
+              {share(row.count).toFixed(1)} %
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {/* The limitation, where the number it qualifies is. The design asked for
+          a colour marking the positions sacrificed to the estimate; the engine
+          does not model them, and saying so is better than inventing them. */}
+      <span style={{ fontSize: 10.5, color: "var(--fg-3)", lineHeight: 1.55 }}>{t.breakdownNote}</span>
+    </div>
+  );
+}
+
 export function Results({
   result,
   first,
   isBB84,
   nQubits,
   threshold,
+  confidence,
   runId,
   stamp,
+  replay,
 }: {
-  result: RunResult;
+  /** The aggregate, once the run is over. Null while it is still going. */
+  result: RunResult | null;
   /** The first trial, the only one that carries the views. */
-  first: TrialResult | undefined;
+  first: TrialResult;
   isBB84: boolean;
   nQubits: number;
   threshold: number;
+  confidence: number;
   runId: string | null;
   stamp: string;
+  replay: Replay;
 }) {
   const t = useCopy();
   const locale = useLocale();
 
-  const qberZ = first?.qber_by_basis?.rectilinear ?? null;
-  const qberX = first?.qber_by_basis?.diagonal ?? null;
-  const eveKnowledge = first?.eavesdropper_knowledge ?? null;
-  const sigma = first?.chsh_sigma ?? null;
+  // Before the aggregate lands there is still one real trial to report; after
+  // it, the mean over all of them. Both are measurements, and the subtitle says
+  // which is on screen.
+  const qber = result?.qber_mean ?? first.qber;
+  const chsh = result?.chsh_mean ?? first.chsh;
+  const spread = result ? `σ ${(result.qber_stdev * 100).toFixed(2)} %` : "trial 1";
+  const qberZ = first.qber_by_basis?.rectilinear ?? null;
+  const qberX = first.qber_by_basis?.diagonal ?? null;
+  const eveKnowledge = first.eavesdropper_knowledge ?? null;
+  const sigma = first.chsh_sigma ?? null;
   // The bound acceptance actually uses: the classical 2 plus k standard
   // deviations, not the bare estimate. On a short run S can sit above Tsirelson
   // and still fail this, which is correct — the bound constrains the true value,
   // not a finite-sample estimate of it.
-  const chshBound = measured(sigma) ? 2 + 3 * sigma : null;
+  const chshBound = measured(sigma) ? 2 + confidence * sigma : null;
 
   const cards: CardSpec[] = [
     {
       label: t.meanQber,
-      value: showPercent(result.qber_mean),
-      sub: `${t.qberSub} · σ ${(result.qber_stdev * 100).toFixed(2)} %`,
-      color: result.qber_mean > threshold ? "var(--red)" : "var(--fg)",
+      value: showPercent(qber),
+      // In E91 the error rate is measured but decides nothing: that protocol is
+      // judged on the Bell parameter alone. Saying so on the card is what keeps
+      // it from reading as a verdict.
+      sub: isBB84 ? `${t.qberSub} · ${spread}` : t.qberNotDeciding,
+      color: isBB84 && qber > threshold ? "var(--red)" : "var(--fg)",
     },
     {
       label: t.siftedKey,
-      value: (first?.n_sifted ?? 0).toLocaleString(locale),
-      sub: `${t.siftingRatio} ${(first?.sifting_ratio ?? 0).toFixed(3)} · ${t.siftedSub}`,
+      value: first.n_sifted.toLocaleString(locale),
+      sub: `${t.siftingRatio} ${first.sifting_ratio.toFixed(3)} · ${t.siftedSub}`,
       color: "var(--fg)",
     },
   ];
@@ -370,23 +511,17 @@ export function Results({
     cards.push(
       { label: t.qberZ, value: showPercent(qberZ), sub: t.zSub, color: measured(qberZ) ? "var(--blue)" : undefined },
       { label: t.qberX, value: showPercent(qberX), sub: t.xSub, color: measured(qberX) ? "var(--purple)" : undefined },
-      { label: t.chsh, value: t.na, sub: t.chshSubBB },
     );
   } else {
-    cards.push(
-      {
-        label: t.chsh,
-        value: measured(result.chsh_mean) ? result.chsh_mean.toFixed(3) : t.na,
-        sub: measured(chshBound) ? `σ ${sigma!.toFixed(3)} · 2+kσ = ${chshBound.toFixed(3)}` : t.naProtocol,
-        color:
-          measured(result.chsh_mean) && measured(chshBound)
-            ? result.chsh_mean > chshBound
-              ? "var(--mint)"
-              : "var(--red)"
-            : undefined,
-      },
-      { label: t.qberZ, value: t.na, sub: t.naProtocol },
-    );
+    // No per-basis cards here, and no CHSH card in BB84 either: a readout whose
+    // only possible value is "not applicable" is a row of furniture.
+    cards.push({
+      label: t.chsh,
+      value: measured(chsh) ? chsh.toFixed(3) : t.na,
+      sub: measured(chshBound) ? `σ ${sigma!.toFixed(3)} · 2+kσ = ${chshBound.toFixed(3)}` : t.naProtocol,
+      color:
+        measured(chsh) && measured(chshBound) ? (chsh > chshBound ? "var(--mint)" : "var(--red)") : undefined,
+    });
   }
 
   cards.push(
@@ -399,59 +534,50 @@ export function Results({
 
   const chart = isBB84
     ? {
+        title: t.gaugeTitle,
         series: [
           {
             label: t.barQber,
-            value: result.qber_mean,
-            color: result.qber_mean > threshold ? "var(--red)" : "var(--mint)",
-            text: showPercent(result.qber_mean),
+            value: qber,
+            color: qber > threshold ? "var(--red)" : "var(--mint)",
+            text: showPercent(qber),
           },
-          ...(measured(qberZ)
-            ? [{ label: t.barZ, value: qberZ, color: "var(--blue)", text: showPercent(qberZ) }]
-            : []),
-          ...(measured(qberX)
-            ? [{ label: t.barX, value: qberX, color: "var(--purple)", text: showPercent(qberX) }]
-            : []),
+          ...(measured(qberZ) ? [{ label: t.barZ, value: qberZ, color: "var(--blue)", text: showPercent(qberZ) }] : []),
+          ...(measured(qberX) ? [{ label: t.barX, value: qberX, color: "var(--purple)", text: showPercent(qberX) }] : []),
         ],
         // Scaled to the threshold rather than fixed, so a run far below it is
         // still legible instead of three stubs against the left edge.
-        max: Math.max(0.25, result.qber_mean * 1.3, threshold * 1.6),
+        max: Math.max(0.25, qber * 1.3, threshold * 1.6),
         ticks: [0, 0.05, 0.1, 0.15, 0.2, 0.25],
         formatTick: (value: number) => `${(value * 100).toFixed(0)} %`,
         rule: { value: threshold, color: "var(--red)", label: `${t.threshold} ${(threshold * 100).toFixed(1)} %` },
         zones: { leftLabel: t.zoneAccept, rightLabel: t.zoneReject, leftAccepts: true },
         axisTitle: t.axisQber,
         caption: t.chartCapBB,
-        title: t.gaugeTitle,
       }
     : {
+        title: t.gaugeTitleE91,
         series: [
           {
             label: t.barS,
-            value: result.chsh_mean ?? 0,
-            color:
-              measured(result.chsh_mean) && measured(chshBound) && result.chsh_mean > chshBound
-                ? "var(--mint)"
-                : "var(--red)",
-            text: `S = ${measured(result.chsh_mean) ? result.chsh_mean.toFixed(3) : t.na}`,
+            value: chsh ?? 0,
+            color: measured(chsh) && measured(chshBound) && chsh > chshBound ? "var(--mint)" : "var(--red)",
+            text: `S = ${measured(chsh) ? chsh.toFixed(3) : t.na}`,
           },
           { label: t.barTsirelson, value: TSIRELSON, color: "var(--purple)", text: TSIRELSON.toFixed(3) },
         ],
-        max: Math.max(TSIRELSON, (result.chsh_mean ?? 0) * 1.05),
+        max: Math.max(TSIRELSON, (chsh ?? 0) * 1.05),
         ticks: [0, 0.5, 1, 1.5, 2, TSIRELSON],
         formatTick: (value: number) => value.toFixed(value === TSIRELSON ? 2 : 1),
-        rule: {
-          value: chshBound ?? 2,
-          color: "var(--red)",
-          label: `2 + kσ = ${(chshBound ?? 2).toFixed(3)}`,
-        },
+        rule: { value: chshBound ?? 2, color: "var(--red)", label: `2 + kσ = ${(chshBound ?? 2).toFixed(3)}` },
         // Reversed: below the bound is where the violation fails, so the low
         // side is the rejecting one.
         zones: { leftLabel: t.zoneReject, rightLabel: t.zoneAccept, leftAccepts: false },
         axisTitle: t.axisS,
         caption: t.chartCapE91,
-        title: t.gaugeTitleE91,
       };
+
+  const readoutsIn = replay.estimate > 0;
 
   return (
     <section
@@ -462,38 +588,43 @@ export function Results({
         display: "flex",
         flexDirection: "column",
         gap: 20,
-        flex: "none",
-        animation: "qrise .34s cubic-bezier(.32,.72,0,1) both",
+        flex: "1 1 auto",
+        animation: "qfade .28s ease both",
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-        <span
-          style={{
-            flex: "none",
-            whiteSpace: "nowrap",
-            padding: "8px 14px",
-            borderRadius: 20,
-            border: `1px solid ${result.accepted ? "var(--mint)" : "var(--red)"}`,
-            background: "var(--panel-2)",
-            color: result.accepted ? "var(--mint)" : "var(--red)",
-            fontSize: 11.5,
-            fontWeight: 600,
-            letterSpacing: ".04em",
-            boxShadow: "inset 0 1px 0 var(--hi)",
-          }}
-        >
-          {result.accepted ? t.keyAccepted : t.keyRejected}
-        </span>
-        {/* Shown verbatim: a rejection whose grounds are not stated is
-            indistinguishable from a bug. */}
-        <span className="mono" style={{ fontSize: 12.5, color: "var(--fg-2)" }}>
-          {result.reason}
-        </span>
+      <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", minHeight: 34 }}>
+        {result && (
+          <>
+            <span
+              style={{
+                flex: "none",
+                whiteSpace: "nowrap",
+                padding: "8px 14px",
+                borderRadius: 20,
+                border: `1px solid ${result.accepted ? "var(--mint)" : "var(--red)"}`,
+                background: "var(--panel-2)",
+                color: result.accepted ? "var(--mint)" : "var(--red)",
+                fontSize: 11.5,
+                fontWeight: 600,
+                letterSpacing: ".04em",
+                boxShadow: "inset 0 1px 0 var(--hi)",
+                animation: "qrise .3s cubic-bezier(.32,.72,0,1) both",
+              }}
+            >
+              {result.accepted ? t.keyAccepted : t.keyRejected}
+            </span>
+            {/* Shown verbatim: a rejection whose grounds are not stated is
+                indistinguishable from a bug. */}
+            <span className="mono" style={{ fontSize: 12.5, color: "var(--fg-2)" }}>
+              {result.reason}
+            </span>
+          </>
+        )}
         <span style={{ flex: 1 }} />
         <span className="mono" style={{ fontSize: 11, color: "var(--fg-3)" }}>
           {stamp}
         </span>
-        {runId && (
+        {result && runId && (
           <a
             className="mono"
             href={exportUrl(runId)}
@@ -511,14 +642,34 @@ export function Results({
         )}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(186px, 1fr))", gap: 10 }}>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(186px, 1fr))",
+          gap: 10,
+          // The readouts are the estimate: they arrive when the replay reaches
+          // it, rather than sitting there while the key is still being sifted.
+          opacity: readoutsIn ? 1 : 0,
+          transform: readoutsIn ? "none" : "translateY(8px)",
+          transition: "opacity .4s ease, transform .4s cubic-bezier(.32,.72,0,1)",
+        }}
+      >
         {cards.map((card) => (
           <Card key={card.label} {...card} />
         ))}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(340px, 1fr))", gap: 26 }}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 12, minWidth: 0 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(360px, 1fr))", gap: 26 }}>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 12,
+            minWidth: 0,
+            opacity: readoutsIn ? 1 : 0,
+            transition: "opacity .4s ease",
+          }}
+        >
           <Kicker>{chart.title}</Kicker>
           <BarChart
             series={chart.series}
@@ -532,8 +683,10 @@ export function Results({
           <span style={{ fontSize: 11, color: "var(--fg-3)", lineHeight: 1.5 }}>{chart.caption}</span>
         </div>
 
-        {first?.views && <Trace views={first.views} isBB84={isBB84} total={nQubits} />}
+        {first.views && <Trace views={first.views} isBB84={isBB84} total={nQubits} replay={replay} />}
       </div>
+
+      {first.views && <Breakdown views={first.views} replay={replay} />}
     </section>
   );
 }

@@ -42,13 +42,11 @@ export function Inspector({
   views,
   isBB84,
   onClose,
-  onRemove,
 }: {
   role: Role;
   views: Views | null;
   isBB84: boolean;
   onClose: () => void;
-  onRemove: () => void;
 }) {
   const t = useCopy();
   const color = ROLE_COLOR[role];
@@ -167,21 +165,6 @@ export function Inspector({
           {role === "eve" ? t.legendEve : isBB84 ? t.legendBB84 : t.legendE91}
         </span>
 
-        <button
-          type="button"
-          onClick={onRemove}
-          style={{
-            border: "1px solid var(--line)",
-            borderRadius: 9,
-            background: "var(--panel-2)",
-            color: "var(--red)",
-            fontSize: 12,
-            padding: 8,
-            cursor: "pointer",
-          }}
-        >
-          {t.removeNode}
-        </button>
       </div>
     </div>
   );

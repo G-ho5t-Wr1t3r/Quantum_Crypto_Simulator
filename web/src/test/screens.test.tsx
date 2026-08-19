@@ -11,7 +11,7 @@
  * the nulls, which is the part most likely to break.
  */
 
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -164,6 +164,113 @@ describe("Configuration", () => {
   });
 });
 
+describe("Configuration, per protocol", () => {
+  it("does not offer a QBER threshold in E91, where it decides nothing", () => {
+    mount(<Configuration />, "/run?protocol=e91");
+    // The engine judges E91 on the Bell parameter alone: offering the error
+    // threshold would be offering a control that is never consulted.
+    expect(screen.queryByLabelText("Soglia QBER")).toBeNull();
+    expect(screen.getByLabelText("Confidenza CHSH")).toBeDefined();
+  });
+
+  it("offers the QBER threshold in BB84, where it is the verdict", () => {
+    mount(<Configuration />, "/run");
+    expect(screen.getByLabelText("Soglia QBER")).toBeDefined();
+    expect(screen.queryByLabelText("Confidenza CHSH")).toBeNull();
+  });
+});
+
+describe("The network diagram", () => {
+  it("depicts the run rather than offering a canvas", () => {
+    mount(<Configuration />, "/run");
+    // Nothing can be added, wired or moved: the picture is derived from the
+    // protocol and the attack, so it cannot disagree with what will run.
+    expect(screen.queryByText("+ Alice")).toBeNull();
+    expect(screen.queryByText("Collega")).toBeNull();
+    expect(screen.queryByText("Svuota")).toBeNull();
+  });
+
+  it("names both kinds of link, including the one nobody can attack", () => {
+    mount(<Configuration />, "/run");
+    expect(screen.getByText(/canale quantistico/)).toBeDefined();
+    expect(screen.getByText(/canale classico/)).toBeDefined();
+  });
+});
+
+describe("The results area before a result", () => {
+  it("holds the space with the shape of what is coming", () => {
+    mount(<Configuration />, "/run");
+    // Not an empty half-screen: the layout that will be filled is already there,
+    // so the arrival of data is a fill rather than a rebuild.
+    expect(screen.getByText("IN ATTESA")).toBeDefined();
+    expect(screen.getByText(/posizione per posizione/)).toBeDefined();
+  });
+
+  it("says the engine is working once a run starts", async () => {
+    mount(<Configuration />, "/run");
+    fireEvent.click(screen.getByText("Esegui la simulazione"));
+    await waitFor(() => expect(screen.queryByText("IN ATTESA")).toBeNull());
+  });
+});
+
+describe("A run, replayed", () => {
+  it("shows the result section once the first trial lands", async () => {
+    mount(<Configuration />, "/run");
+    expect(screen.queryByText(/CHIAVE/)).toBeNull();
+
+    fireEvent.click(screen.getByText("Esegui la simulazione"));
+
+    // The verdict waits for the real aggregate; it is the one part of the
+    // replay that reports something instead of illustrating it.
+    await waitFor(() => expect(screen.getByText("CHIAVE ACCETTATA")).toBeDefined());
+    expect(screen.getByText(/QBER = 0.0200/)).toBeDefined();
+  });
+
+  it("lays out the trace with one row per participant", async () => {
+    mount(<Configuration />, "/run");
+    fireEvent.click(screen.getByText("Esegui la simulazione"));
+    await waitFor(() => expect(screen.getByText("Tracciato per posizione")).toBeDefined());
+    // No Eve in the stubbed views, so no Eve row and no "intercepted" legend.
+    expect(screen.queryByText("intercettata")).toBeNull();
+  });
+});
+
+describe("What the run is made of", () => {
+  it("reports the key's composition in counts, not only as a ratio", async () => {
+    mount(<Configuration />, "/run");
+    fireEvent.click(screen.getByText("Esegui la simulazione"));
+    await waitFor(() => expect(screen.getByText("Composizione della chiave")).toBeDefined());
+    // Three kept-and-correct, one basis mismatch, in the stubbed views.
+    expect(screen.getByText("3")).toBeDefined();
+    // The limitation is stated where the number it qualifies is.
+    expect(screen.getByText(/campione sacrificato/)).toBeDefined();
+  });
+});
+
+describe("Reproducing a run", () => {
+  it("adopts a pasted configuration", () => {
+    mount(<Configuration />, "/run");
+    fireEvent.click(screen.getByText("Carica una configurazione"));
+    fireEvent.change(screen.getByLabelText("Carica una configurazione"), {
+      target: { value: JSON.stringify({ protocol: "e91", seed: 4242, n_qubits: 800 }) },
+    });
+    fireEvent.click(screen.getByText("Applica"));
+
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("E91");
+    expect((screen.getByLabelText("Seed") as HTMLInputElement).value).toBe("4242");
+  });
+
+  it("refuses something that is not a configuration", () => {
+    mount(<Configuration />, "/run");
+    fireEvent.click(screen.getByText("Carica una configurazione"));
+    fireEvent.change(screen.getByLabelText("Carica una configurazione"), {
+      target: { value: "not json" },
+    });
+    fireEvent.click(screen.getByText("Applica"));
+    expect(screen.getByText(/JSON non valido/)).toBeDefined();
+  });
+});
+
 describe("Exploration", () => {
   it("mounts with an axis selected and nothing swept yet", () => {
     mount(<Exploration />, "/explore");
@@ -183,6 +290,13 @@ describe("Exploration", () => {
 });
 
 describe("Comparison", () => {
+  it("says out loud that it only applies to BB84", () => {
+    mount(<Comparison />, "/compare");
+    // The screen rests on the per-basis split, which E91 does not have. Someone
+    // arriving from E91 has no other way to know.
+    expect(screen.getByText("solo BB84")).toBeDefined();
+  });
+
   it("runs both sides on arrival and reports them", async () => {
     mount(<Comparison />, "/compare");
     await waitFor(() => expect(screen.getAllByText("2.00 %").length).toBeGreaterThan(0));

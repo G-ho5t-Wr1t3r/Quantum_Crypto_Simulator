@@ -1,33 +1,19 @@
 /**
- * The configuration screen's state: what to run, and how the network is drawn.
+ * What to run.
  *
- * The two are kept together because they are not independent — enabling an
- * attack has to put an Eve on an attackable link, and removing one has to take
- * her off it. A topology that disagrees with the configuration would be a
- * picture of a run nobody asked for.
+ * Only the configuration lives here now. The network is no longer something the
+ * reader assembles: it is derived from the protocol and the attack, and drawn
+ * from the topology the backend declares. That removes a whole class of
+ * confusion — a hand-built picture could disagree with the run it was supposed
+ * to depict, and the picture is the thing people believe.
  */
 
 import { useCallback, useMemo, useState } from "react";
 
 import type { ProtocolKind, SimulationConfig } from "../../api/contract";
-import { clamp, gammaFromLength } from "../../lib/physics";
-import type { Role } from "../../lib/roles";
+import { gammaFromLength } from "../../lib/physics";
 
 export type ChannelMode = "gamma" | "length_km";
-export type PresetId = "pair" | "eve" | "epr" | "blank" | "custom";
-
-export interface Node {
-  id: number;
-  role: Role;
-  /** Position on the ground plane: u across, v towards the viewer, both 0…1. */
-  x: number;
-  y: number;
-}
-
-export interface Link {
-  a: number;
-  b: number;
-}
 
 export interface Params {
   protocol: ProtocolKind;
@@ -61,192 +47,17 @@ export const DEFAULT_PARAMS: Params = {
   chshConfidence: 3,
 };
 
-interface PresetShape {
-  nodes: [Role, number, number][];
-  links: [number, number][];
-  attack: Params["attackKind"];
-  protocol?: ProtocolKind;
-}
-
-export const PRESETS: Record<Exclude<PresetId, "custom">, PresetShape> = {
-  pair: {
-    nodes: [
-      ["alice", 0.21, 0.8],
-      ["bob", 0.79, 0.8],
-    ],
-    links: [[0, 1]],
-    attack: "none",
-  },
-  eve: {
-    nodes: [
-      ["alice", 0.17, 0.7],
-      ["eve", 0.5, 0.95],
-      ["bob", 0.83, 0.7],
-    ],
-    links: [
-      [0, 1],
-      [1, 2],
-    ],
-    attack: "intercept_resend",
-  },
-  epr: {
-    nodes: [
-      ["alice", 0.18, 0.72],
-      ["source", 0.5, 0.94],
-      ["bob", 0.82, 0.72],
-    ],
-    // Both arms leave the source: that is what makes E91 a source in the middle
-    // rather than a sender at one end.
-    links: [
-      [1, 0],
-      [1, 2],
-    ],
-    attack: "none",
-    protocol: "e91",
-  },
-  blank: { nodes: [], links: [], attack: "none" },
-};
-
-function build(preset: Exclude<PresetId, "custom">): { nodes: Node[]; links: Link[]; nextId: number } {
-  const shape = PRESETS[preset];
-  const nodes = shape.nodes.map((entry, index) => ({
-    id: index + 1,
-    role: entry[0],
-    x: entry[1],
-    y: entry[2],
-  }));
-  const links = shape.links.map(([a, b]) => ({ a: nodes[a]!.id, b: nodes[b]!.id }));
-  return { nodes, links, nextId: nodes.length + 1 };
-}
-
 export function useConfiguration(initialProtocol: ProtocolKind) {
   const [params, setParams] = useState<Params>({ ...DEFAULT_PARAMS, protocol: initialProtocol });
-  const initial = build(initialProtocol === "e91" ? "epr" : "eve");
-  const [nodes, setNodes] = useState<Node[]>(initial.nodes);
-  const [links, setLinks] = useState<Link[]>(initial.links);
-  const [nextId, setNextId] = useState(initial.nextId);
-  const [preset, setPreset] = useState<PresetId>(initialProtocol === "e91" ? "epr" : "eve");
-  const [selected, setSelected] = useState<number | null>(null);
+  const [selected, setSelected] = useState<string | null>(null);
 
-  const applyPreset = useCallback((id: Exclude<PresetId, "custom">) => {
-    const built = build(id);
-    setNodes(built.nodes);
-    setLinks(built.links);
-    setNextId(built.nextId);
-    setPreset(id);
-    setSelected(null);
-    setParams((current) => ({
-      ...current,
-      attackKind: PRESETS[id].attack,
-      protocol: PRESETS[id].protocol ?? current.protocol,
-    }));
+  const set = useCallback(<K extends keyof Params>(key: K, value: Params[K]) => {
+    setParams((current) => ({ ...current, [key]: value }));
   }, []);
 
-  /**
-   * Keep the drawing honest when the attack is switched on or off.
-   *
-   * Turning it on splices an Eve into the first link, so the picture shows an
-   * attacker standing on something attackable. Turning it off removes her and
-   * rejoins what she was standing between, rather than leaving the path broken.
-   */
-  const syncAttacker = useCallback((enabled: boolean) => {
-    setNodes((currentNodes) => {
-      const eve = currentNodes.find((node) => node.role === "eve");
-      if (enabled === !!eve) return currentNodes;
+  const reset = useCallback(() => setParams({ ...DEFAULT_PARAMS }), []);
 
-      if (enabled) {
-        setLinks((currentLinks) => {
-          const first = currentLinks[0];
-          if (!first) return currentLinks;
-          return [
-            ...currentLinks.slice(1),
-            { a: first.a, b: nextId },
-            { a: nextId, b: first.b },
-          ];
-        });
-        const first = links[0];
-        const a = currentNodes.find((node) => node.id === first?.a);
-        const b = currentNodes.find((node) => node.id === first?.b);
-        if (!a || !b) return currentNodes;
-        let u = (a.x + b.x) / 2;
-        // Keep clear of the neighbours she would otherwise stand in front of.
-        for (const neighbour of [a, b]) {
-          if (Math.abs(u - neighbour.x) < 0.13) u += u >= neighbour.x ? 0.17 : -0.17;
-        }
-        setNextId((id) => id + 1);
-        return [
-          ...currentNodes,
-          {
-            id: nextId,
-            role: "eve" as Role,
-            x: clamp(u, 0.1, 0.9),
-            y: Math.min(0.95, Math.max(a.y, b.y) + 0.1),
-          },
-        ];
-      }
-
-      const gone = eve!.id;
-      setLinks((currentLinks) => {
-        const neighbours = currentLinks
-          .filter((link) => link.a === gone || link.b === gone)
-          .map((link) => (link.a === gone ? link.b : link.a));
-        const rest = currentLinks.filter((link) => link.a !== gone && link.b !== gone);
-        const rejoin =
-          neighbours.length === 2 &&
-          !rest.some(
-            (link) =>
-              (link.a === neighbours[0] && link.b === neighbours[1]) ||
-              (link.a === neighbours[1] && link.b === neighbours[0]),
-          )
-            ? [{ a: neighbours[0]!, b: neighbours[1]! }]
-            : [];
-        return [...rest, ...rejoin];
-      });
-      setSelected(null);
-      return currentNodes.filter((node) => node.id !== gone);
-    });
-  }, [links, nextId]);
-
-  const set = useCallback(
-    <K extends keyof Params>(key: K, value: Params[K]) => {
-      setParams((current) => ({ ...current, [key]: value }));
-      if (key === "attackKind") syncAttacker(value !== "none");
-    },
-    [syncAttacker],
-  );
-
-  const addNode = useCallback((role: Role) => {
-    setNodes((current) => [
-      ...current,
-      { id: nextId, role, x: 0.34 + Math.random() * 0.32, y: 0.6 + Math.random() * 0.3 },
-    ]);
-    setNextId((id) => id + 1);
-    setPreset("custom");
-  }, [nextId]);
-
-  const removeNode = useCallback((id: number) => {
-    setNodes((current) => current.filter((node) => node.id !== id));
-    setLinks((current) => current.filter((link) => link.a !== id && link.b !== id));
-    setSelected(null);
-    setPreset("custom");
-  }, []);
-
-  const moveNode = useCallback((id: number, x: number, y: number) => {
-    setNodes((current) =>
-      current.map((node) => (node.id === id ? { ...node, x, y } : node)),
-    );
-  }, []);
-
-  const connect = useCallback((a: number, b: number) => {
-    setLinks((current) =>
-      current.some((link) => (link.a === a && link.b === b) || (link.a === b && link.b === a))
-        ? current
-        : [...current, { a, b }],
-    );
-    setPreset("custom");
-  }, []);
-
-  /** The damping parameter actually in force, whichever way it was described. */
+  /** The damping actually in force, whichever way it was described. */
   const gamma = useMemo(
     () =>
       params.channelKind === "ideal"
@@ -263,6 +74,12 @@ export function useConfiguration(initialProtocol: ProtocolKind) {
    * Exactly one of γ and length_km is ever sent: the backend rejects both, and
    * sending the one the reader did not choose would silently rewrite what they
    * asked for.
+   *
+   * The security policy carries both fields whatever the protocol, because that
+   * is the shape the backend validates. Which of the two it consults is the
+   * backend's business: BB84 is judged on the error rate, E91 on the Bell
+   * parameter, and the interface only has to avoid *offering* the one that will
+   * be ignored.
    */
   const apiConfig = useMemo<SimulationConfig>(() => {
     const channel =
@@ -293,21 +110,56 @@ export function useConfiguration(initialProtocol: ProtocolKind) {
     };
   }, [params]);
 
-  return {
-    params,
-    set,
-    setParams,
-    nodes,
-    links,
-    preset,
-    selected,
-    setSelected,
-    applyPreset,
-    addNode,
-    removeNode,
-    moveNode,
-    connect,
-    gamma,
-    apiConfig,
-  };
+  /**
+   * Adopt a configuration that came from outside — the JSON of a previous run.
+   *
+   * The counterpart of copying it out, and the reason both exist: a figure in
+   * the report can name the exact run that produced it, and that run can be
+   * played back here rather than reconstructed by hand from a caption.
+   *
+   * Unknown or missing fields keep their current value instead of resetting the
+   * form: a partial paste should move what it mentions and leave the rest.
+   */
+  const load = useCallback((raw: string): boolean => {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return false;
+    }
+    if (!parsed || typeof parsed !== "object") return false;
+
+    const body = parsed as Partial<SimulationConfig>;
+    const channel = body.channel;
+    const attack = body.attack;
+    const security = body.security;
+
+    const isProtocol = body.protocol === "bb84" || body.protocol === "e91";
+    const number = (value: unknown, fallback: number) =>
+      typeof value === "number" && Number.isFinite(value) ? value : fallback;
+
+    setParams((current) => ({
+      ...current,
+      protocol: isProtocol ? body.protocol! : current.protocol,
+      nQubits: number(body.n_qubits, current.nQubits),
+      trials: number(body.trials, current.trials),
+      seed: number(body.seed, current.seed),
+      channelKind: channel?.kind === "ideal" || channel?.kind === "amplitude_damping" ? channel.kind : current.channelKind,
+      // Whichever of the two descriptions the JSON used is the one the form
+      // then shows, so a run configured in kilometres comes back in kilometres.
+      channelMode:
+        channel?.length_km != null ? "length_km" : channel?.gamma != null ? "gamma" : current.channelMode,
+      gamma: number(channel?.gamma, current.gamma),
+      km: number(channel?.length_km, current.km),
+      attackKind:
+        attack?.kind === "none" || attack?.kind === "intercept_resend" ? attack.kind : current.attackKind,
+      position: attack?.position === "endpoint" || attack?.position === "channel" ? attack.position : current.position,
+      fraction: number(attack?.fraction, current.fraction),
+      qberThreshold: number(security?.qber_threshold, current.qberThreshold),
+      chshConfidence: number(security?.chsh_confidence, current.chshConfidence),
+    }));
+    return true;
+  }, []);
+
+  return { params, set, reset, load, selected, setSelected, gamma, apiConfig };
 }

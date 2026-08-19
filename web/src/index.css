@@ -88,7 +88,29 @@ input[type="range"]::-moz-range-thumb {
   width: 16px; height: 16px; border: none; border-radius: 50%;
   background: var(--thumb); box-shadow: 0 1px 2px rgba(0,0,0,.5);
 }
+/*
+ * Focus, visible.
+ *
+ * `:focus-visible` rather than `:focus`, so a mouse click does not leave a ring
+ * behind while keyboard navigation always shows one. The ring is drawn in the
+ * accent colour with an offset, which reads on every surface in both themes —
+ * a token-coloured outline flush against a panel border disappears into it.
+ *
+ * Nothing here may be replaced by `outline: none` without putting something
+ * else in its place: an interface whose focus cannot be seen cannot be used
+ * from the keyboard at all.
+ */
+:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
 input[type="range"]:focus { outline: none; }
+input[type="range"]:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 4px;
+}
 
 @keyframes qtravel {
   0%   { transform: translateX(0) scale(.7); opacity: 0 }
@@ -97,7 +119,43 @@ input[type="range"]:focus { outline: none; }
   100% { transform: translateX(var(--len)) scale(1.15); opacity: 0 }
 }
 @keyframes qbreath { 0%, 100% { opacity: .5 } 50% { opacity: .95 } }
+@keyframes qfade { from { opacity: 0 } to { opacity: 1 } }
 @keyframes qrise { from { opacity: 0; transform: translateY(10px) } to { opacity: 1; transform: none } }
+/*
+ * The loading language.
+ *
+ * A skeleton is the shape of the thing that is coming, not a spinner: the
+ * layout is already correct while the data is missing, so nothing jumps when it
+ * arrives. The sweep is a highlight passing over a surface — the same idea as
+ * the inset highlight every panel carries, in motion.
+ */
+@keyframes qshimmer {
+  0%   { background-position: 180% 0 }
+  100% { background-position: -80% 0 }
+}
+
+.skeleton {
+  background-color: var(--seg);
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in oklab, var(--fg) 7%, transparent) 45%,
+    color-mix(in oklab, var(--fg) 11%, transparent) 50%,
+    color-mix(in oklab, var(--fg) 7%, transparent) 55%,
+    transparent 100%
+  );
+  background-size: 220% 100%;
+  background-repeat: no-repeat;
+  animation: qshimmer 1.9s ease-in-out infinite;
+}
+
+/* Held still: the shape is what carries the meaning, the movement is only a
+   sign that something is on its way. */
+.skeleton--still {
+  animation: none;
+  background-image: none;
+}
+
 @keyframes qhint { 0%, 100% { transform: translateY(0); opacity: .85 } 50% { transform: translateY(6px); opacity: 1 } }
 @keyframes qring { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }
 @keyframes qringrev { from { transform: rotate(360deg) } to { transform: rotate(0deg) } }

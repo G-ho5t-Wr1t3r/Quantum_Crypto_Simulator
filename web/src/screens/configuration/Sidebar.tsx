@@ -9,12 +9,15 @@
  * configuration the server will reject has wasted their time.
  */
 
+import { useState } from "react";
+
 import { Kicker, RunButton, Segmented, Slider } from "../../components/controls";
 import { LangSwitch, ThemeSwitch } from "../../components/AppearanceControls";
 import type { Plugins, ProtocolKind } from "../../api/contract";
+import { useSchemaBounds, within } from "../../api/queries";
 import { useCopy, useLocale } from "../../i18n/useCopy";
 import { gammaFromLength } from "../../lib/physics";
-import { PRESETS, type Params, type PresetId } from "./state";
+import type { Params } from "./state";
 
 const SECTION = {
   padding: "18px 22px",
@@ -61,63 +64,42 @@ function ProtocolCard({
   );
 }
 
-/** A miniature of the topology, so a preset can be recognised without reading. */
-function PresetGlyph({ id }: { id: Exclude<PresetId, "custom"> }) {
-  const shape = PRESETS[id];
-  const count = shape.nodes.length;
-  return (
-    <span style={{ position: "relative", width: 52, height: 18, flex: "none" }}>
-      <span style={{ position: "absolute", left: 5, right: 5, top: 8, height: 1, background: "var(--line-2)" }} />
-      {shape.nodes.map((_, index) => {
-        const fraction = count === 1 ? 0.5 : index / (count - 1);
-        const color =
-          index === 0 ? "var(--blue)" : index === count - 1 ? "var(--mint)" : id === "epr" ? "var(--purple)" : "var(--red)";
-        return (
-          <span
-            key={index}
-            style={{
-              position: "absolute",
-              top: 5,
-              left: 5 + fraction * 42,
-              width: 8,
-              height: 8,
-              borderRadius: "50%",
-              background: color,
-              boxShadow: `0 0 6px -1px ${color}`,
-            }}
-          />
-        );
-      })}
-    </span>
-  );
-}
-
 export function Sidebar({
   params,
   set,
-  preset,
-  applyPreset,
   plugins,
   busy,
   onRun,
   onReset,
   onCopy,
   copied,
+  onLoad,
 }: {
   params: Params;
   set: <K extends keyof Params>(key: K, value: Params[K]) => void;
-  preset: PresetId;
-  applyPreset: (id: Exclude<PresetId, "custom">) => void;
   plugins: Plugins | undefined;
   busy: boolean;
   onRun: () => void;
   onReset: () => void;
   onCopy: () => void;
   copied: boolean;
+  /** Adopt a pasted configuration; false when it could not be read. */
+  onLoad: (raw: string) => boolean;
 }) {
   const t = useCopy();
   const locale = useLocale();
   const isBB84 = params.protocol === "bb84";
+
+  // The ranges below are a presentation choice; these are the limits the
+  // backend actually enforces. Intersecting the two means a slider can never
+  // reach a value the server would refuse, even if a bound is tightened there
+  // later.
+  const [pasting, setPasting] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [badPaste, setBadPaste] = useState(false);
+
+  const bounds = useSchemaBounds();
+  const range = (path: string, min: number, max: number) => within({ min, max }, bounds(path));
   const attacking = params.attackKind !== "none";
 
   // Straight from the backend: an attack may only be performed from the
@@ -169,46 +151,8 @@ export function Sidebar({
               name="E91"
               sub={t.e91sub}
               active={!isBB84}
-              // E91 needs a source between the two parties; switching without
-              // moving the topology would draw a protocol nobody runs.
-              onClick={() => applyPreset("epr")}
+              onClick={() => set("protocol", "e91" as ProtocolKind)}
             />
-          </div>
-        </section>
-
-        <section style={{ ...SECTION, gap: 10 }}>
-          <Kicker>{t.topology}</Kicker>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            {(["pair", "eve", "epr", "blank"] as const).map((id) => {
-              const [label, description] = t.presets[id];
-              const active = preset === id;
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => applyPreset(id)}
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: 12,
-                    padding: "10px 12px",
-                    borderRadius: 12,
-                    border: `1px solid ${active ? "var(--line-2)" : "var(--line)"}`,
-                    background: active ? "var(--panel-2)" : "var(--panel)",
-                    color: "var(--fg)",
-                    cursor: "pointer",
-                    boxShadow: active ? "inset 0 1px 0 var(--hi)" : "none",
-                  }}
-                >
-                  <span style={{ display: "flex", flexDirection: "column", gap: 2, textAlign: "left", minWidth: 0 }}>
-                    <span style={{ fontSize: 13, fontWeight: 500 }}>{label}</span>
-                    <span style={{ fontSize: 11, color: "var(--fg-3)", lineHeight: 1.35 }}>{description}</span>
-                  </span>
-                  <PresetGlyph id={id} />
-                </button>
-              );
-            })}
           </div>
         </section>
 
@@ -240,8 +184,8 @@ export function Sidebar({
                   label={t.gamma}
                   display={params.gamma.toFixed(3)}
                   hint={t.gammaHint}
-                  min={0}
-                  max={0.5}
+                  min={range("ChannelConfig.gamma", 0, 0.5).min}
+                  max={range("ChannelConfig.gamma", 0, 0.5).max}
                   step={0.005}
                   value={params.gamma}
                   onChange={(value) => set("gamma", value)}
@@ -251,8 +195,8 @@ export function Sidebar({
                   label={t.lengthKm}
                   display={`${params.km} km → γ ${gammaFromLength(params.km).toFixed(3)}`}
                   hint={t.kmHint}
-                  min={0}
-                  max={120}
+                  min={range("ChannelConfig.length_km", 0, 120).min}
+                  max={range("ChannelConfig.length_km", 0, 120).max}
                   step={1}
                   value={params.km}
                   onChange={(value) => set("km", value)}
@@ -291,8 +235,8 @@ export function Sidebar({
                 label={t.fraction}
                 display={`${(params.fraction * 100).toFixed(0)} %`}
                 hint={t.fractionHint}
-                min={0}
-                max={1}
+                min={range("AttackConfig.fraction", 0, 1).min}
+                max={range("AttackConfig.fraction", 0, 1).max}
                 step={0.01}
                 value={params.fraction}
                 onChange={(value) => set("fraction", value)}
@@ -307,8 +251,8 @@ export function Sidebar({
             label={t.qubits}
             display={params.nQubits.toLocaleString(locale)}
             hint={t.qubitsHint}
-            min={200}
-            max={20000}
+            min={range("n_qubits", 200, 20000).min}
+            max={range("n_qubits", 200, 20000).max}
             step={100}
             value={params.nQubits}
             onChange={(value) => set("nQubits", value)}
@@ -317,8 +261,8 @@ export function Sidebar({
             label={t.trials}
             display={String(params.trials)}
             hint={t.trialsHint}
-            min={1}
-            max={20}
+            min={range("trials", 1, 20).min}
+            max={range("trials", 1, 20).max}
             step={1}
             value={params.trials}
             onChange={(value) => set("trials", value)}
@@ -372,23 +316,27 @@ export function Sidebar({
 
         <section style={{ ...SECTION, borderBottom: "none", paddingBottom: 22 }}>
           <Kicker>{t.security}</Kicker>
-          <Slider
-            label={t.threshold}
-            display={params.qberThreshold.toFixed(3)}
-            hint={t.thresholdHint}
-            min={0.02}
-            max={0.3}
-            step={0.005}
-            value={params.qberThreshold}
-            onChange={(value) => set("qberThreshold", value)}
-          />
-          {!isBB84 && (
+          {/* One or the other, never both. The engine judges BB84 on the error
+              rate and E91 on the Bell parameter: the threshold it does not
+              consult is a control that would do nothing. */}
+          {isBB84 ? (
+            <Slider
+              label={t.threshold}
+              display={params.qberThreshold.toFixed(3)}
+              hint={t.thresholdHint}
+              min={range("SecurityPolicy.qber_threshold", 0.02, 0.3).min}
+              max={range("SecurityPolicy.qber_threshold", 0.02, 0.3).max}
+              step={0.005}
+              value={params.qberThreshold}
+              onChange={(value) => set("qberThreshold", value)}
+            />
+          ) : (
             <Slider
               label={t.confidence}
               display={`${params.chshConfidence} σ`}
               hint={t.confidenceHint}
-              min={1}
-              max={6}
+              min={range("SecurityPolicy.chsh_confidence", 1, 6).min}
+              max={range("SecurityPolicy.chsh_confidence", 1, 6).max}
               step={1}
               value={params.chshConfidence}
               onChange={(value) => set("chshConfidence", value)}
@@ -410,6 +358,79 @@ export function Sidebar({
           >
             {copied ? t.copied : t.copyConfig}
           </button>
+
+          {/* A field rather than a clipboard read: pasting into it always works,
+              where `navigator.clipboard.readText` needs a permission the browser
+              may simply refuse. */}
+          <button
+            type="button"
+            onClick={() => {
+              setPasting((open) => !open);
+              setBadPaste(false);
+            }}
+            style={{
+              border: "1px solid var(--line)",
+              borderRadius: 10,
+              background: "var(--panel-2)",
+              color: "var(--fg-2)",
+              padding: 10,
+              fontSize: 12,
+              cursor: "pointer",
+              boxShadow: "inset 0 1px 0 var(--hi)",
+            }}
+          >
+            {t.loadConfig}
+          </button>
+
+          {pasting && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <span style={{ fontSize: 11, color: "var(--fg-3)", lineHeight: 1.45 }}>{t.loadHint}</span>
+              <textarea
+                value={draft}
+                aria-label={t.loadConfig}
+                onChange={(event) => {
+                  setDraft(event.target.value);
+                  setBadPaste(false);
+                }}
+                rows={6}
+                className="mono"
+                style={{
+                  background: "var(--panel)",
+                  border: `1px solid ${badPaste ? "var(--red)" : "var(--line)"}`,
+                  borderRadius: 9,
+                  padding: "9px 11px",
+                  color: "var(--fg)",
+                  fontSize: 11.5,
+                  resize: "vertical",
+                  outline: "none",
+                }}
+              />
+              {badPaste && <span style={{ fontSize: 11, color: "var(--red)" }}>{t.loadInvalid}</span>}
+              <button
+                type="button"
+                onClick={() => {
+                  if (onLoad(draft)) {
+                    setPasting(false);
+                    setDraft("");
+                  } else {
+                    setBadPaste(true);
+                  }
+                }}
+                style={{
+                  border: "1px solid var(--line)",
+                  borderRadius: 10,
+                  background: "var(--panel-3)",
+                  color: "var(--fg)",
+                  padding: 9,
+                  fontSize: 12,
+                  fontWeight: 590,
+                  cursor: "pointer",
+                }}
+              >
+                {t.loadApply}
+              </button>
+            </div>
+          )}
         </section>
       </div>
 
