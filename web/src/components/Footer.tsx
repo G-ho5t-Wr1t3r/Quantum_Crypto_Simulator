@@ -1,21 +1,31 @@
 /**
- * The shared footer.
+ * The footer, on the landing page only.
  *
- * Links that do not exist yet are rendered as text with a "coming soon" suffix
- * and no href, rather than as a live link to nowhere: a link that does nothing
- * when clicked is worse than one that says it is not ready.
+ * Three kinds of destination: a route inside the app, an address outside it,
+ * and a link that does not exist yet. The third is rendered as plain text with
+ * a "coming soon" suffix and no href, because a link that does nothing when
+ * clicked is worse than one that admits it is not ready.
  *
- * The Natural Earth credit is required by the geometry the landing page uses and
- * must stay.
+ * Only the label is shown, never the URL. A footer is a place to go, not a
+ * place to read addresses out of — and a bare link is what a reader hovers to
+ * see where it leads.
  */
 
 import { Link } from "react-router-dom";
 
 import { useCopy } from "../i18n/useCopy";
 
+const REPOSITORY = "https://github.com/G-ho5t-Wr1t3r/Quantum_Crypto_Simulator";
+const GITHUB = "https://github.com/G-ho5t-Wr1t3r";
+const LINKEDIN = "https://www.linkedin.com/in/giovanni-lorenzo-murfuni-38655a309/";
+const EMAIL = "contatti.giovannimurfuni@gmail.com";
+
 interface Item {
   label: string;
+  /** A route inside the app. */
   to?: string;
+  /** An address outside it: opened in its own tab, or a mailto. */
+  href?: string;
 }
 
 function Column({ title, items }: { title: string; items: Item[] }) {
@@ -28,17 +38,35 @@ function Column({ title, items }: { title: string; items: Item[] }) {
       >
         {title}
       </span>
-      {items.map((item) =>
-        item.to ? (
-          <Link key={item.label} to={item.to} style={{ fontSize: 13, color: "var(--fg-2)" }}>
-            {item.label}
-          </Link>
-        ) : (
+      {items.map((item) => {
+        if (item.to) {
+          return (
+            <Link key={item.label} to={item.to} style={{ fontSize: 13, color: "var(--fg-2)" }}>
+              {item.label}
+            </Link>
+          );
+        }
+        if (item.href) {
+          const external = !item.href.startsWith("mailto:");
+          return (
+            <a
+              key={item.label}
+              href={item.href}
+              // `noopener` is the one that matters: without it the opened page
+              // gets a handle on this one through `window.opener`.
+              {...(external ? { target: "_blank", rel: "noopener noreferrer" } : null)}
+              style={{ fontSize: 13, color: "var(--fg-2)" }}
+            >
+              {item.label}
+            </a>
+          );
+        }
+        return (
           <span key={item.label} style={{ fontSize: 13, color: "var(--fg-3)" }}>
             {item.label} · {t.comingSoon}
           </span>
-        ),
-      )}
+        );
+      })}
     </div>
   );
 }
@@ -76,7 +104,7 @@ export function Footer() {
           <Column
             title={t.colProject}
             items={[
-              { label: t.linkRepo },
+              { label: t.linkRepo, href: REPOSITORY },
               { label: t.linkApi },
               { label: t.linkConfig, to: "/run" },
               { label: t.linkExplore, to: "/explore" },
@@ -86,7 +114,11 @@ export function Footer() {
           />
           <Column
             title={t.colContact}
-            items={[{ label: "Email" }, { label: "GitHub" }, { label: "LinkedIn" }]}
+            items={[
+              { label: t.linkEmail, href: `mailto:${EMAIL}` },
+              { label: t.linkGithub, href: GITHUB },
+              { label: t.linkLinkedin, href: LINKEDIN },
+            ]}
           />
         </div>
       </div>

@@ -392,18 +392,21 @@ const it = {
 
   // Footer -----------------------------------------------------------------
   footerBlurb:
-    "Progetto di tesi: motore di simulazione in Python, API FastAPI documentata, interfaccia in tempo reale su WebSocket.",
+    "Progetto Quantum Computing / Network Security: motore di simulazione QKD per BB84 & E91.",
   footerNote: "Simulatore didattico — nessuna chiave reale viene distribuita.",
-  footerCredits: "Geometria: Natural Earth (dominio pubblico) · FastAPI · WebSocket",
+  footerCredits: "Python · FastAPI · WebSocket",
   comingSoon: "in arrivo",
   colProject: "PROGETTO",
   colContact: "CONTATTI",
-  linkRepo: "Repository",
+  linkRepo: "Repository Pubblico",
   linkApi: "Documentazione API",
   linkConfig: "Apri il simulatore",
   linkExplore: "Esplorazione",
   linkCompare: "Confronto",
   linkHome: "Home",
+  linkEmail: "Contattami",
+  linkGithub: "GitHub",
+  linkLinkedin: "Linkedin",
 
   // Failures ---------------------------------------------------------------
   backendDown: "Backend non raggiungibile. Avvia l'API e ricarica.",
@@ -784,18 +787,21 @@ const en: Copy = {
   stripOk: "correct bit",
 
   footerBlurb:
-    "Thesis project: simulation engine in Python, documented FastAPI service, realtime interface over WebSocket.",
+    "Quantum Computing / Network Security project: a QKD simulation engine for BB84 & E91.",
   footerNote: "Teaching simulator — no real key is ever distributed.",
-  footerCredits: "Geometry: Natural Earth (public domain) · FastAPI · WebSocket",
+  footerCredits: "Python · FastAPI · WebSocket",
   comingSoon: "coming soon",
   colProject: "PROJECT",
   colContact: "CONTACT",
-  linkRepo: "Repository",
+  linkRepo: "Public repository",
   linkApi: "API documentation",
   linkConfig: "Open the simulator",
   linkExplore: "Exploration",
   linkCompare: "Comparison",
   linkHome: "Home",
+  linkEmail: "Get in touch",
+  linkGithub: "GitHub",
+  linkLinkedin: "Linkedin",
 
   backendDown: "Backend unreachable. Start the API and reload.",
   refused: "Configuration refused",
