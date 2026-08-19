@@ -1,0 +1,117 @@
+/*
+ * The token layer.
+ *
+ * These custom-property names are the contract between the design and the
+ * implementation: every component reads colour through them and never hard-codes
+ * a hex value, so a theme switch is a change of one attribute on the root and
+ * nothing else.
+ *
+ * The semantic language is fixed across all four screens and is worth stating
+ * once, because it carries meaning rather than taste:
+ *
+ *   --blue    Alice · rectilinear (Z) basis · channel noise
+ *   --mint    Bob · kept and correct · accepted
+ *   --red     Eve · error · rejected
+ *   --purple  diagonal (X) basis · entanglement
+ *   --orange  sampled positions · mean marker
+ *   --grey    discarded
+ *
+ * A component that picks a colour for decoration rather than for one of those
+ * meanings is saying something the screen does not mean.
+ */
+
+[data-qkd="dark"] {
+  color-scheme: dark;
+  --bg: #08080a; --bg-2: #0d0d10; --panel: #16161a; --panel-2: #1e1e23; --panel-3: #26262c;
+  --seg: #141418; --line: rgba(255,255,255,.08); --line-2: rgba(255,255,255,.15);
+  --fg: #f2f2f4; --fg-2: #a3a3aa; --fg-3: #6b6b73;
+  --blue: #4c8dff; --mint: #4cc47d; --red: #e5544b; --orange: #dc9236; --purple: #9a7ae0; --grey: #85858d;
+  --track: rgba(255,255,255,.16); --thumb: #f2f2f4;
+  --sky: #0b0b0e; --floor: #101014; --horizon: rgba(120,160,255,.10); --plot: #0b0b0e;
+  --grid: rgba(255,255,255,.5); --shadow: rgba(0,0,0,.62); --hi: rgba(255,255,255,.09);
+}
+
+[data-qkd="light"] {
+  color-scheme: light;
+  --bg: #dcdce0; --bg-2: #e5e5e9; --panel: #eeeef1; --panel-2: #f6f6f8; --panel-3: #ffffff;
+  --seg: #d5d5da; --line: rgba(0,0,0,.11); --line-2: rgba(0,0,0,.2);
+  --fg: #17171a; --fg-2: #4f4f57; --fg-3: #7c7c85;
+  --blue: #1667d4; --mint: #2c8a52; --red: #c4382f; --orange: #9b6410; --purple: #6f4fbf; --grey: #74747c;
+  --track: rgba(0,0,0,.16); --thumb: #ffffff;
+  --sky: #cfcfd5; --floor: #e3e3e7; --horizon: rgba(60,90,160,.12); --plot: #d2d2d8;
+  --grid: rgba(0,0,0,.42); --shadow: rgba(0,0,0,.28); --hi: rgba(255,255,255,.75);
+}
+
+html, body, #root { margin: 0; padding: 0; height: 100%; }
+* { box-sizing: border-box; }
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+  letter-spacing: -.01em;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--fg-2); text-decoration: none; }
+a:hover { color: var(--fg); }
+button { font-family: inherit; }
+::selection { background: rgba(76,141,255,.28); }
+
+/* Numbers, axis labels and kickers. Tabular figures so a value that updates
+   twenty times a second does not make the layout twitch. */
+.mono {
+  font-family: ui-monospace, "SF Mono", monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.kicker {
+  font-family: ui-monospace, "SF Mono", monospace;
+  font-size: 10.5px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--blue);
+  font-weight: 500;
+}
+
+input[type="range"] {
+  -webkit-appearance: none; appearance: none;
+  height: 20px; background: transparent; cursor: pointer; width: 100%;
+}
+input[type="range"]::-webkit-slider-runnable-track { height: 4px; border-radius: 3px; background: var(--track); }
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 16px; height: 16px; margin-top: -6px; border-radius: 50%;
+  background: var(--thumb); box-shadow: 0 1px 2px rgba(0,0,0,.5), inset 0 1px 0 var(--hi);
+}
+input[type="range"]::-moz-range-track { height: 4px; border-radius: 3px; background: var(--track); }
+input[type="range"]::-moz-range-thumb {
+  width: 16px; height: 16px; border: none; border-radius: 50%;
+  background: var(--thumb); box-shadow: 0 1px 2px rgba(0,0,0,.5);
+}
+input[type="range"]:focus { outline: none; }
+
+@keyframes qtravel {
+  0%   { transform: translateX(0) scale(.7); opacity: 0 }
+  14%  { opacity: 1 }
+  86%  { opacity: 1 }
+  100% { transform: translateX(var(--len)) scale(1.15); opacity: 0 }
+}
+@keyframes qbreath { 0%, 100% { opacity: .5 } 50% { opacity: .95 } }
+@keyframes qrise { from { opacity: 0; transform: translateY(10px) } to { opacity: 1; transform: none } }
+@keyframes qhint { 0%, 100% { transform: translateY(0); opacity: .85 } 50% { transform: translateY(6px); opacity: 1 } }
+@keyframes qring { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }
+@keyframes qringrev { from { transform: rotate(360deg) } to { transform: rotate(0deg) } }
+
+/*
+ * The landing page's eight beats are scroll positions, not timed animations, so
+ * they survive this untouched. What is removed is everything that moves on its
+ * own: photon travel, breathing glows, the spinning globe.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

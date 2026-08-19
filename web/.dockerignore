@@ -1,0 +1,8 @@
+# node_modules above all: the build installs its own from the lockfile, and
+# shipping a host-built tree would send hundreds of megabytes to the daemon and
+# risk native binaries compiled for the wrong platform.
+node_modules
+dist
+.git
+*.local
+tsconfig.tsbuildinfo
