@@ -23,7 +23,6 @@ import type { RunResult, TrialResult } from "../../api/contract";
 import { useRun } from "../../api/useRun";
 import { LangSwitch, ThemeSwitch } from "../../components/AppearanceControls";
 import { BarChart } from "../../components/BarChart";
-import { Footer } from "../../components/Footer";
 import { Chip, Kicker, RunButton, Segmented, Slider } from "../../components/controls";
 import { Banner } from "../../components/Banner";
 import { SideSkeleton } from "../../components/Skeleton";
@@ -622,8 +621,6 @@ export default function Comparison() {
           </span>
         </section>
       </main>
-
-      <Footer />
     </div>
   );
 }

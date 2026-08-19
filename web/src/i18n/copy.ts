@@ -14,7 +14,7 @@ import type { SweepAxis } from "../api/contract";
 
 /** Two-column entries: the label and the value beside it. */
 type Pair = [string, string];
-type AxisOption = { id: SweepAxis; label: string; field: string };
+type AxisOption = { id: Extract<SweepAxis, "length_km" | "attack_fraction">; label: string; field: string };
 
 const it = {
   brand: "Quantum Crypto Simulator",
@@ -281,22 +281,25 @@ const it = {
   axisLabel: "Asse dello sweep",
   axisHint: "Ogni punto dell'asse è una run completa: lo sweep restituisce una curva, non un numero.",
   axes: [
-    { id: "gamma", label: "γ — probabilità di decadimento", field: "gamma" },
-    { id: "length_km", label: "Lunghezza della fibra", field: "length_km" },
+    { id: "length_km", label: "Attenuazione del canale", field: "length_km · γ" },
     { id: "attack_fraction", label: "Frazione intercettata", field: "attack_fraction" },
   ] as AxisOption[],
   rangeMin: "Inizio range",
   rangeMax: "Fine range",
   points: "Punti dello sweep",
+  stepLabel: "Passo",
+  runColumn: "run",
   fixedLabel: "Parametri fissi",
   qubitsPerPoint: "Qubit per punto",
   runSweep: "Esegui lo sweep",
   sweeping: "Sweep in corso",
   rerun: "Ripeti lo sweep",
   exportLabel: "Esporta la figura",
-  exportHint: "PNG e SVG per la relazione, CSV per rifare il grafico altrove.",
   tableTitle: "Punti dello sweep",
   tableNote: "una riga per run, nell'ordine dell'asse",
+  expand: "Espandi",
+  expandTitle: "Punti dello sweep, per esteso",
+  close: "Chiudi",
   thVerdict: "esito",
   legendQber: "QBER medio",
   legendZ: "base Z (↕)",
@@ -306,41 +309,26 @@ const it = {
   legendThrS: "limite classico 2",
   yQber: "QBER stimato (%)",
   yS: "parametro di Bell S",
-  xGamma: "γ — probabilità di decadimento",
-  xKm: "lunghezza della fibra (km)",
+  xKm: "lunghezza della fibra (km) · γ corrispondente",
   xF: "frazione dei qubit intercettata",
   figureKicker: "Figura generata dallo sweep",
   titles: <Record<string, string>>{
-    bb84_gamma: "QBER(γ) con le due basi separate",
-    bb84_length_km: "QBER(L) al crescere della fibra",
     bb84_attack_fraction: "QBER(F) al crescere dell'intercettazione",
-    e91_gamma: "S(γ): degrado della violazione di Bell",
-    e91_length_km: "S(L): dove si perde la violazione",
     e91_attack_fraction: "S(F): l'attacco distrugge la correlazione",
   },
   captions: <Record<string, string>>{
-    bb84_gamma:
-      "Il damping degrada la base rettilinea circa il doppio della diagonale: le due curve divergono, e la loro distanza è la firma del canale. La riga tratteggiata è la soglia di accettazione: dove la curva media la supera, la chiave viene scartata.",
-    bb84_length_km:
-      "Con γ = 1 − exp(−L/L₀) la stessa fisica si legge in chilometri: la curva è concava, e l'incrocio con la soglia dice fino a dove la tratta regge senza relay.",
     bb84_attack_fraction:
-      "Contro un intercept-resend il QBER cresce linearmente con la frazione intercettata (0.25·F): la soglia diventa una frazione massima tollerata, non un valore astratto.",
-    e91_gamma:
-      "S parte dal massimo quantistico 2√2 e scende: sotto il limite classico 2 la violazione non è più dimostrabile e la chiave non è certificabile, anche se il QBER sembra ancora accettabile.",
-    e91_length_km:
-      "La violazione si perde a una distanza precisa: è il punto in cui una singola tratta non basta più e serve un relay fidato.",
+      "Contro un intercept-resend il QBER cresce linearmente con la frazione intercettata (0.25·F).",
     e91_attack_fraction:
       "Anche una frazione modesta di qubit intercettati porta S sotto il limite classico: l'entanglement è ciò che l'attacco distrugge per primo.",
   },
   crossing: "Incrocio con la soglia",
   crossingNone: "nessun incrocio nel range",
-  crossingSubQ: "oltre questo valore la chiave viene scartata",
-  crossingSubS: "oltre questo valore la violazione non è più dimostrabile",
+  crossingSubS: "oltre questo valore la violazione non è più dimostrabile, serve un relay",
   asymmetry: "Asimmetria Z/X media",
   asymmetrySub: "≈ 2 è la firma dell'amplitude damping",
   asymmetryNaSub: "E91 non separa le basi come BB84",
   acceptedRuns: "Run accettate",
-  ofPoints: "sui punti dello sweep",
 
   // Comparison -------------------------------------------------------------
   comparisonTitle: "Confronto rumore vs attacco",
@@ -687,22 +675,25 @@ const en: Copy = {
   axisLabel: "Sweep axis",
   axisHint: "Every point on the axis is a full run: a sweep returns a curve, not a number.",
   axes: [
-    { id: "gamma", label: "γ — decay probability", field: "gamma" },
-    { id: "length_km", label: "Fibre length", field: "length_km" },
+    { id: "length_km", label: "Channel attenuation", field: "length_km · γ" },
     { id: "attack_fraction", label: "Intercepted fraction", field: "attack_fraction" },
   ] as AxisOption[],
   rangeMin: "Range start",
   rangeMax: "Range end",
   points: "Sweep points",
+  stepLabel: "Step",
+  runColumn: "run",
   fixedLabel: "Fixed parameters",
   qubitsPerPoint: "Qubits per point",
   runSweep: "Run the sweep",
   sweeping: "Sweeping",
   rerun: "Run it again",
   exportLabel: "Export the figure",
-  exportHint: "PNG and SVG for the report, CSV to redraw it elsewhere.",
   tableTitle: "Sweep points",
   tableNote: "one row per run, in axis order",
+  expand: "Expand",
+  expandTitle: "Sweep points, in full",
+  close: "Close",
   thVerdict: "verdict",
   legendQber: "mean QBER",
   legendZ: "Z basis (↕)",
@@ -712,41 +703,26 @@ const en: Copy = {
   legendThrS: "classical bound 2",
   yQber: "estimated QBER (%)",
   yS: "Bell parameter S",
-  xGamma: "γ — decay probability",
-  xKm: "fibre length (km)",
+  xKm: "fibre length (km) · equivalent γ",
   xF: "fraction of qubits intercepted",
   figureKicker: "Figure generated by the sweep",
   titles: <Record<string, string>>{
-    bb84_gamma: "QBER(γ) with the two bases separated",
-    bb84_length_km: "QBER(L) as the fibre grows",
     bb84_attack_fraction: "QBER(F) as interception grows",
-    e91_gamma: "S(γ): the Bell violation degrading",
-    e91_length_km: "S(L): where the violation is lost",
     e91_attack_fraction: "S(F): the attack destroys the correlation",
   },
   captions: <Record<string, string>>{
-    bb84_gamma:
-      "Damping degrades the rectilinear basis about twice as hard as the diagonal one: the two curves diverge, and their distance is the channel's fingerprint. The dashed rule is the acceptance threshold: where the mean curve crosses it, the key is discarded.",
-    bb84_length_km:
-      "With γ = 1 − exp(−L/L₀) the same physics reads in kilometres: the curve is concave, and the crossing tells how far a single hop holds without a relay.",
     bb84_attack_fraction:
-      "Against intercept-resend the QBER grows linearly with the intercepted fraction (0.25·F): the threshold becomes a maximum tolerated fraction rather than an abstract value.",
-    e91_gamma:
-      "S starts at the quantum maximum 2√2 and falls: below the classical bound of 2 the violation is no longer demonstrable and the key cannot be certified, even where the QBER still looks acceptable.",
-    e91_length_km:
-      "The violation is lost at a definite distance: that is the point where a single hop no longer suffices and a trusted relay is needed.",
+      "Against intercept-resend the QBER grows linearly with the intercepted fraction (0.25·F).",
     e91_attack_fraction:
       "Even a modest intercepted fraction pushes S below the classical bound: entanglement is what an attack destroys first.",
   },
   crossing: "Threshold crossing",
   crossingNone: "no crossing in range",
-  crossingSubQ: "beyond this value the key is discarded",
-  crossingSubS: "beyond this value the violation is no longer demonstrable",
+  crossingSubS: "beyond this value the violation is no longer demonstrable, a relay is needed",
   asymmetry: "Mean Z/X asymmetry",
   asymmetrySub: "≈ 2 is the amplitude-damping fingerprint",
   asymmetryNaSub: "E91 does not split the bases the way BB84 does",
   acceptedRuns: "Accepted runs",
-  ofPoints: "out of the sweep points",
 
   comparisonTitle: "Noise vs attack, side by side",
   targetLabel: "Target QBER — identical on both sides",

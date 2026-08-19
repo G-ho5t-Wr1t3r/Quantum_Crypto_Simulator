@@ -11,7 +11,7 @@
  * the nulls, which is the part most likely to break.
  */
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -127,6 +127,12 @@ function stubWebSocket() {
     close() {}
   }
   vi.stubGlobal("WebSocket", FakeSocket);
+}
+
+/** Tear the previous tree down first, for a test that mounts two screens. */
+function cleanupAndMount(element: ReactElement, path = "/") {
+  cleanup();
+  return mount(element, path);
 }
 
 function mount(element: ReactElement, path = "/") {
@@ -446,12 +452,91 @@ describe("Exploration", () => {
 
   it("names the closed set of axes, and the seed is not among them", () => {
     mount(<Exploration />, "/explore");
-    for (const field of ["gamma", "length_km", "attack_fraction"]) {
-      expect(screen.getAllByText(field).length).toBeGreaterThan(0);
-    }
+    // Two, not three: γ and a length are one quantity, so one sweep covers both
+    // and the tick labels carry the second reading.
+    expect(screen.getAllByText("length_km · γ").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("attack_fraction").length).toBeGreaterThan(0);
     // Sweeping the seed would draw a curve of pure noise that looks like a
     // result, so it must not be offerable at all.
     expect(screen.queryByText("seed")).toBeNull();
+  });
+
+  it("reads the channel axis in both units", () => {
+    mount(<Exploration />, "/explore");
+    expect(screen.getByText("Attenuazione del canale")).toBeDefined();
+    // Both readings on the range controls, as on the axis itself.
+    expect(screen.getByText(/20\.0 km · γ/)).toBeDefined();
+    // And the count says how far apart the points fall, which is what it sets.
+    expect(screen.getByText(/Passo 1\.00 km/)).toBeDefined();
+  });
+});
+
+describe("The footer", () => {
+  it("belongs to the landing page and nowhere else", () => {
+    // On a tool screen it is a second thing to scroll past on the way to the
+    // data, and every one of these screens ends in data.
+    mount(<Landing />);
+    expect(screen.getAllByText(/Simulatore didattico/).length).toBeGreaterThan(0);
+
+    cleanupAndMount(<Exploration />, "/explore");
+    expect(screen.queryByText(/Simulatore didattico/)).toBeNull();
+  });
+});
+
+describe("The sweep table, in full", () => {
+  it("cannot be expanded before there is anything in it", () => {
+    mount(<Exploration />, "/explore");
+    expect((screen.getByText(/Espandi/) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("closes on the button, on Escape, and on a click outside", async () => {
+    // A sweep streams points, not trials: the generic stub would leave the
+    // curve empty and the button rightly disabled.
+    class SweepSocket {
+      onmessage: ((event: { data: string }) => void) | null = null;
+      onerror: (() => void) | null = null;
+      onclose: (() => void) | null = null;
+      constructor() {
+        setTimeout(() => {
+          const send = (payload: unknown) => this.onmessage?.({ data: JSON.stringify(payload) });
+          const point = (index: number) => ({
+            value: index * 10,
+            qber: 0.02 * (index + 1),
+            qber_stdev: 0.001,
+            chsh: null,
+            chsh_stdev: null,
+            accepted: true,
+            qber_by_basis: { rectilinear: 0.03, diagonal: 0.01 },
+            eavesdropper_knowledge: null,
+          });
+          send({ kind: "started", index: null, payload: { axis: "length_km", points: 2 } });
+          [0, 1].forEach((index) => send({ kind: "sweep_point", index, payload: point(index) }));
+          // The final event carries the whole curve, and it replaces what was
+          // accumulated — so it has to be the whole curve.
+          send({ kind: "done", index: null, payload: { axis: "length_km", points: [point(0), point(1)] } });
+          this.onclose?.();
+        }, 0);
+      }
+      close() {}
+    }
+    vi.stubGlobal("WebSocket", SweepSocket);
+
+    mount(<Exploration />, "/explore");
+    fireEvent.click(screen.getByText("Esegui lo sweep"));
+    await waitFor(() => expect((screen.getByText(/Espandi/) as HTMLButtonElement).disabled).toBe(false));
+
+    // Three ways out, because a reader who wants out should not have to find
+    // the one control that does it.
+    for (const shut of [
+      () => fireEvent.click(screen.getByLabelText("Chiudi")),
+      () => fireEvent.keyDown(window, { key: "Escape" }),
+      () => fireEvent.click(screen.getByRole("dialog")),
+    ]) {
+      fireEvent.click(screen.getByText(/Espandi/));
+      expect(screen.getByRole("dialog")).toBeDefined();
+      shut();
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    }
   });
 });
 

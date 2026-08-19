@@ -173,6 +173,18 @@ input[type="range"]:focus-visible {
   background-image: none;
 }
 
+/* A panel arriving: it grows into place from just under its own size, rather
+   than appearing. Reversed on the way out, so closing is not a disappearance. */
+@keyframes qpop {
+  from { opacity: 0; transform: scale(.965) translateY(10px) }
+  to   { opacity: 1; transform: none }
+}
+@keyframes qpopOut {
+  from { opacity: 1; transform: none }
+  to   { opacity: 0; transform: scale(.975) translateY(6px) }
+}
+@keyframes qfadeOut { from { opacity: 1 } to { opacity: 0 } }
+
 @keyframes qhint { 0%, 100% { transform: translateY(0); opacity: .85 } 50% { transform: translateY(6px); opacity: 1 } }
 @keyframes qring { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }
 @keyframes qringrev { from { transform: rotate(360deg) } to { transform: rotate(0deg) } }

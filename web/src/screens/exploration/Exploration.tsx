@@ -19,26 +19,178 @@ import { ApiError } from "../../api/client";
 import type { ProtocolKind, SweepAxis, SweepPoint } from "../../api/contract";
 import { useRun } from "../../api/useRun";
 import { LangSwitch, ThemeSwitch } from "../../components/AppearanceControls";
-import { Footer } from "../../components/Footer";
 import { Kicker, RunButton, Segmented, Slider } from "../../components/controls";
 import { Banner } from "../../components/Banner";
+import { Modal } from "../../components/Modal";
 import { ChartSkeleton, ReadoutsSkeleton } from "../../components/Skeleton";
 import { LineChart } from "../../components/LineChart";
 import { usePlugins } from "../../api/queries";
 import { useCopy, useLocale } from "../../i18n/useCopy";
 import { download, downloadPng, downloadSvg } from "../../lib/download";
-import { CLASSICAL_BOUND, MIN_E91_PAIRS, TSIRELSON } from "../../lib/physics";
+import { CLASSICAL_BOUND, gammaFromLength, lengthFromGamma, MIN_E91_PAIRS, TSIRELSON } from "../../lib/physics";
 
 /** Sensible ranges per axis: wide enough to contain the crossing, no wider. */
-const AXIS_RANGE: Record<SweepAxis, { min: number; max: number; lo: number; hi: number; step: number; decimals: number }> = {
-  gamma: { min: 0, max: 0.45, lo: 0, hi: 0.3, step: 0.005, decimals: 3 },
-  length_km: { min: 0, max: 120, lo: 0, hi: 60, step: 1, decimals: 1 },
+type Axis = Extract<SweepAxis, "length_km" | "attack_fraction">;
+
+/**
+ * The axes offered, and the window each opens on.
+ *
+ * γ is not among them, and that is not an omission. γ and a fibre length are
+ * one quantity related by γ = 1 − exp(−L/L₀): sweeping both would run the same
+ * simulations twice and produce two drawings of one result. The length is the
+ * one kept because it is the reading that answers the question a network puts —
+ * how far a hop holds — and because the range here is chosen by the reader, so
+ * nothing is lost to a fixed scale. The equivalent γ is printed under every
+ * tick.
+ */
+const AXIS_RANGE: Record<Axis, { min: number; max: number; lo: number; hi: number; step: number; decimals: number }> = {
+  length_km: { min: 0, max: 120, lo: 0, hi: 20, step: 0.5, decimals: 1 },
   attack_fraction: { min: 0, max: 1, lo: 0, hi: 1, step: 0.02, decimals: 2 },
 };
 
 const QUBITS = 1200;
 const SEED = 20260818;
 const THRESHOLD = 0.11;
+
+
+/**
+ * The sweep, one row per run.
+ *
+ * Extracted so the same table can be shown twice: cropped under the figure,
+ * where it is a reference, and at full height in a panel of its own, where it
+ * is the thing being read. Two copies of this markup would have drifted apart
+ * on the first change to a column.
+ */
+function SweepTable({
+  curve,
+  isBB84,
+  axis,
+  formatAxisValue,
+  maxHeight,
+}: {
+  curve: SweepPoint[];
+  isBB84: boolean;
+  axis: string;
+  formatAxisValue: (value: number) => string;
+  maxHeight: number | string;
+}) {
+  const t = useCopy();
+  return (
+          <div
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              maxHeight,
+              overflowY: "auto",
+              border: "1px solid var(--line)",
+              borderRadius: 12,
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                gap: 6,
+                padding: "9px 12px",
+                background: "var(--seg)",
+                borderBottom: "1px solid var(--line)",
+                position: "sticky",
+                top: 0,
+              }}
+            >
+              {(isBB84
+                ? [t.runColumn, axis, t.meanQber, "Z", "X", t.thVerdict]
+                : [t.runColumn, axis, t.meanQber, "S", t.thVerdict]
+              ).map((heading, index) => (
+                <span
+                  key={heading}
+                  className="mono"
+                  style={{
+                    flex: index === 0 ? 0.5 : index === 1 ? 1.2 : 1,
+                    minWidth: 0,
+                    fontSize: 11,
+                    color: "var(--fg-3)",
+                  }}
+                >
+                  {heading}
+                </span>
+              ))}
+            </div>
+            {curve.map((point, index) => {
+              // Numbered from one, and shown even though the axis value is
+              // right there: "look at run 21" is how two people end up talking
+              // about the same point.
+              const number = { text: String(index + 1), color: "var(--fg-3)", grow: 0.5 };
+              const cells = isBB84
+                ? [
+                    number,
+                    { text: formatAxisValue(point.value), color: "var(--fg)", grow: 1.2 },
+                    { text: `${(point.qber * 100).toFixed(2)} %`, color: point.accepted ? "var(--mint)" : "var(--red)", grow: 1 },
+                    {
+                      text:
+                        point.qber_by_basis?.rectilinear != null
+                          ? `${(point.qber_by_basis.rectilinear * 100).toFixed(2)} %`
+                          : "—",
+                      color: "var(--blue)",
+                      grow: 1,
+                    },
+                    {
+                      text:
+                        point.qber_by_basis?.diagonal != null
+                          ? `${(point.qber_by_basis.diagonal * 100).toFixed(2)} %`
+                          : "—",
+                      color: "var(--purple)",
+                      grow: 1,
+                    },
+                    {
+                      text: point.accepted ? t.accepted : t.rejected,
+                      color: point.accepted ? "var(--mint)" : "var(--red)",
+                      grow: 1,
+                    },
+                  ]
+                : [
+                    number,
+                    { text: formatAxisValue(point.value), color: "var(--fg)", grow: 1.2 },
+                    { text: `${(point.qber * 100).toFixed(2)} %`, color: "var(--fg-2)", grow: 1 },
+                    { text: point.chsh !== null ? point.chsh.toFixed(3) : "—", color: point.accepted ? "var(--mint)" : "var(--red)", grow: 1 },
+                    {
+                      text: point.accepted ? t.accepted : t.rejected,
+                      color: point.accepted ? "var(--mint)" : "var(--red)",
+                      grow: 1,
+                    },
+                  ];
+              return (
+                <div
+                  key={point.value}
+                  style={{
+                    display: "flex",
+                    gap: 6,
+                    padding: "7px 12px",
+                    background: index % 2 ? "var(--panel-2)" : "var(--panel)",
+                  }}
+                >
+                  {cells.map((cell, cellIndex) => (
+                    <span
+                      key={cellIndex}
+                      className="mono"
+                      style={{
+                        flex: cell.grow,
+                        minWidth: 0,
+                        fontSize: 11,
+                        color: cell.color,
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                      }}
+                    >
+                      {cell.text}
+                    </span>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+  );
+}
 
 export default function Exploration() {
   const t = useCopy();
@@ -49,11 +201,12 @@ export default function Exploration() {
   const backend = usePlugins();
 
   const [protocol, setProtocol] = useState<ProtocolKind>("bb84");
-  const [axis, setAxis] = useState<SweepAxis>("gamma");
-  const [lo, setLo] = useState(AXIS_RANGE.gamma.lo);
-  const [hi, setHi] = useState(AXIS_RANGE.gamma.hi);
+  const [axis, setAxis] = useState<Axis>("length_km");
+  const [lo, setLo] = useState(AXIS_RANGE.length_km.lo);
+  const [hi, setHi] = useState(AXIS_RANGE.length_km.hi);
   const [points, setPoints] = useState(21);
   const [failure, setFailure] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
 
   const plotHost = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -72,7 +225,7 @@ export default function Exploration() {
   const isBB84 = protocol === "bb84";
   const range = AXIS_RANGE[axis];
 
-  const changeAxis = useCallback((next: SweepAxis) => {
+  const changeAxis = useCallback((next: Axis) => {
     setAxis(next);
     setLo(AXIS_RANGE[next].lo);
     setHi(AXIS_RANGE[next].hi);
@@ -180,18 +333,22 @@ export default function Exploration() {
   }, [curve, isBB84]);
 
   const key = `${protocol}_${axis}`;
-  const xTitle = axis === "gamma" ? t.xGamma : axis === "length_km" ? t.xKm : t.xF;
-  const formatAxisValue = (value: number) =>
-    axis === "length_km" ? value.toFixed(0) : value.toFixed(axis === "attack_fraction" ? 2 : 3);
+  const onKm = axis === "length_km";
+  const xTitle = onKm ? t.xKm : t.xF;
+  const formatAxisValue = (value: number) => (onKm ? `${value.toFixed(1)} km` : value.toFixed(2));
+  /** The same tick in the other unit, so one sweep answers in both. */
+  const formatAxisGamma = onKm ? (value: number) => `γ ${gammaFromLength(value).toFixed(3)}` : undefined;
 
   const exportCsv = useCallback(() => {
+    const unit = onKm ? "length_km" : "attack_fraction";
     const header = isBB84
-      ? ["value", "qber", "qber_stdev", "qber_rectilinear", "qber_diagonal", "eavesdropper_knowledge", "accepted"]
-      : ["value", "qber", "qber_stdev", "chsh", "chsh_stdev", "accepted"];
+      ? [unit, "gamma", "qber", "qber_stdev", "qber_rectilinear", "qber_diagonal", "eavesdropper_knowledge", "accepted"]
+      : [unit, "gamma", "qber", "qber_stdev", "chsh", "chsh_stdev", "accepted"];
     const rows = curve.map((point) =>
       (isBB84
         ? [
             point.value,
+            onKm ? gammaFromLength(point.value) : "",
             point.qber,
             point.qber_stdev,
             point.qber_by_basis?.rectilinear ?? "",
@@ -199,7 +356,15 @@ export default function Exploration() {
             point.eavesdropper_knowledge ?? "",
             point.accepted,
           ]
-        : [point.value, point.qber, point.qber_stdev, point.chsh ?? "", point.chsh_stdev ?? "", point.accepted]
+        : [
+            point.value,
+            onKm ? gammaFromLength(point.value) : "",
+            point.qber,
+            point.qber_stdev,
+            point.chsh ?? "",
+            point.chsh_stdev ?? "",
+            point.accepted,
+          ]
       )
         // An empty field, never a zero: the same null convention the API uses,
         // in the one format that has no way to state it.
@@ -376,7 +541,7 @@ export default function Exploration() {
           >
             <Slider
               label={t.rangeMin}
-              display={axis === "length_km" ? `${lo.toFixed(1)} km` : lo.toFixed(range.decimals)}
+              display={onKm ? `${lo.toFixed(1)} km · γ ${gammaFromLength(lo).toFixed(3)}` : lo.toFixed(range.decimals)}
               min={range.min}
               max={range.max}
               step={range.step}
@@ -385,7 +550,7 @@ export default function Exploration() {
             />
             <Slider
               label={t.rangeMax}
-              display={axis === "length_km" ? `${hi.toFixed(1)} km` : hi.toFixed(range.decimals)}
+              display={onKm ? `${hi.toFixed(1)} km · γ ${gammaFromLength(hi).toFixed(3)}` : hi.toFixed(range.decimals)}
               min={range.min}
               max={range.max}
               step={range.step}
@@ -394,7 +559,9 @@ export default function Exploration() {
             />
             <Slider
               label={t.points}
-              display={String(points)}
+              display={`${points} · ${t.stepLabel} ${
+                onKm ? `${((hi - lo) / (points - 1)).toFixed(2)} km` : ((hi - lo) / (points - 1)).toFixed(3)
+              }`}
               min={2}
               max={60}
               step={1}
@@ -418,7 +585,7 @@ export default function Exploration() {
               [t.trials, "1"],
               [t.seed, String(SEED)],
               isBB84 ? [t.threshold, "11.0 %"] : [t.confidence, "k = 3"],
-              axis === "attack_fraction" ? ["γ", "0.020"] : [t.fraction, "0.00"],
+              onKm ? [t.fraction, "0.00"] : ["γ", `0.020 · ${lengthFromGamma(0.02).toFixed(1)} km`],
             ].map(([label, value]) => (
               <div key={label} style={{ display: "flex", alignItems: "center", gap: 9 }}>
                 <span style={{ fontSize: 11.5, color: "var(--fg-2)", whiteSpace: "nowrap" }}>{label}</span>
@@ -509,7 +676,6 @@ export default function Exploration() {
                 </button>
               ))}
             </div>
-            <span style={{ fontSize: 11, lineHeight: 1.5, color: "var(--fg-3)" }}>{t.exportHint}</span>
           </div>
         </aside>
 
@@ -565,14 +731,18 @@ export default function Exploration() {
                 yTicks={isBB84 ? [0, 0.1, 0.2, 0.3, 0.4, 0.5] : [0, 0.5, 1, 1.5, 2, 2.5, TSIRELSON]}
                 formatY={(value) => (isBB84 ? `${(value * 100).toFixed(0)} %` : value.toFixed(value === TSIRELSON ? 2 : 1))}
                 formatX={formatAxisValue}
+                formatX2={formatAxisGamma}
                 rule={{
                   value: isBB84 ? THRESHOLD : CLASSICAL_BOUND,
                   label: isBB84 ? t.legendThrQber : t.legendThrS,
                 }}
                 crossing={crossing}
-                formatCrossing={(value) => (axis === "length_km" ? `${value.toFixed(1)} km` : value.toFixed(3))}
+                formatCrossing={(value) =>
+                  onKm ? `${value.toFixed(1)} km · γ ${gammaFromLength(value).toFixed(3)}` : value.toFixed(3)
+                }
                 xTitle={xTitle}
                 yTitle={isBB84 ? t.yQber : t.yS}
+                runLabel={t.runColumn}
                 width={plotWidth}
                 acceptFill={isBB84 ? "var(--mint)" : "var(--blue)"}
               />
@@ -592,19 +762,19 @@ export default function Exploration() {
                 value:
                   crossing === null
                     ? t.crossingNone
-                    : axis === "length_km"
+                    : onKm
                       ? `${crossing.toFixed(1)} km`
                       : crossing.toFixed(3),
                 color: crossing === null ? "var(--fg-3)" : "var(--red)",
                 big: crossing !== null,
-                sub: isBB84 ? t.crossingSubQ : t.crossingSubS,
+                sub: isBB84 ? "" : t.crossingSubS,
               },
               {
                 label: t.acceptedRuns,
                 value: `${acceptedCount} / ${done}`,
                 color: acceptedCount ? "var(--mint)" : "var(--red)",
                 big: true,
-                sub: t.ofPoints,
+                sub: "",
               },
               asymmetry === null
                 ? { label: t.asymmetry, value: t.na, color: "var(--fg-3)", big: false, sub: t.asymmetryNaSub }
@@ -660,117 +830,55 @@ export default function Exploration() {
           >
             <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 14, flexWrap: "wrap" }}>
               <Kicker>{t.tableTitle}</Kicker>
-              <span className="mono" style={{ fontSize: 10.5, color: "var(--fg-3)" }}>
-                {t.tableNote}
+              <span style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <span className="mono" style={{ fontSize: 10.5, color: "var(--fg-3)" }}>
+                  {t.tableNote}
+                </span>
+                {/* The inline table is cropped on purpose — it sits under the
+                    figure, which is the thing being looked at. When the table
+                    *is* the thing being looked at, it gets the room. */}
+                <button
+                  type="button"
+                  onClick={() => setExpanded(true)}
+                  disabled={!done}
+                  className="mono"
+                  style={{
+                    padding: "5px 11px",
+                    border: "1px solid var(--line)",
+                    borderRadius: 8,
+                    background: "var(--panel-2)",
+                    color: done ? "var(--fg-2)" : "var(--fg-3)",
+                    fontSize: 11,
+                    cursor: done ? "pointer" : "default",
+                    boxShadow: "inset 0 1px 0 var(--hi)",
+                  }}
+                >
+                  {t.expand} ⤢
+                </button>
               </span>
             </div>
-            <div
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                maxHeight: 240,
-                overflowY: "auto",
-                border: "1px solid var(--line)",
-                borderRadius: 12,
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  gap: 6,
-                  padding: "9px 12px",
-                  background: "var(--seg)",
-                  borderBottom: "1px solid var(--line)",
-                  position: "sticky",
-                  top: 0,
-                }}
-              >
-                {(isBB84
-                  ? [axis, t.meanQber, "Z", "X", t.thVerdict]
-                  : [axis, t.meanQber, "S", t.thVerdict]
-                ).map((heading, index) => (
-                  <span
-                    key={heading}
-                    className="mono"
-                    style={{ flex: index === 0 ? 1.2 : 1, minWidth: 0, fontSize: 11, color: "var(--fg-3)" }}
-                  >
-                    {heading}
-                  </span>
-                ))}
-              </div>
-              {curve.map((point, index) => {
-                const cells = isBB84
-                  ? [
-                      { text: formatAxisValue(point.value), color: "var(--fg)", grow: 1.2 },
-                      { text: `${(point.qber * 100).toFixed(2)} %`, color: point.accepted ? "var(--mint)" : "var(--red)", grow: 1 },
-                      {
-                        text:
-                          point.qber_by_basis?.rectilinear != null
-                            ? `${(point.qber_by_basis.rectilinear * 100).toFixed(2)} %`
-                            : "—",
-                        color: "var(--blue)",
-                        grow: 1,
-                      },
-                      {
-                        text:
-                          point.qber_by_basis?.diagonal != null
-                            ? `${(point.qber_by_basis.diagonal * 100).toFixed(2)} %`
-                            : "—",
-                        color: "var(--purple)",
-                        grow: 1,
-                      },
-                      {
-                        text: point.accepted ? t.accepted : t.rejected,
-                        color: point.accepted ? "var(--mint)" : "var(--red)",
-                        grow: 1,
-                      },
-                    ]
-                  : [
-                      { text: formatAxisValue(point.value), color: "var(--fg)", grow: 1.2 },
-                      { text: `${(point.qber * 100).toFixed(2)} %`, color: "var(--fg-2)", grow: 1 },
-                      { text: point.chsh !== null ? point.chsh.toFixed(3) : "—", color: point.accepted ? "var(--mint)" : "var(--red)", grow: 1 },
-                      {
-                        text: point.accepted ? t.accepted : t.rejected,
-                        color: point.accepted ? "var(--mint)" : "var(--red)",
-                        grow: 1,
-                      },
-                    ];
-                return (
-                  <div
-                    key={point.value}
-                    style={{
-                      display: "flex",
-                      gap: 6,
-                      padding: "7px 12px",
-                      background: index % 2 ? "var(--panel-2)" : "var(--panel)",
-                    }}
-                  >
-                    {cells.map((cell, cellIndex) => (
-                      <span
-                        key={cellIndex}
-                        className="mono"
-                        style={{
-                          flex: cell.grow,
-                          minWidth: 0,
-                          fontSize: 11,
-                          color: cell.color,
-                          whiteSpace: "nowrap",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                        }}
-                      >
-                        {cell.text}
-                      </span>
-                    ))}
-                  </div>
-                );
-              })}
-            </div>
+            <SweepTable
+              curve={curve}
+              isBB84={isBB84}
+              axis={axis}
+              formatAxisValue={formatAxisValue}
+              maxHeight={240}
+            />
           </section>
         </main>
       </div>
 
-      <Footer />
+      {expanded && (
+        <Modal title={t.expandTitle} closeLabel={t.close} onClose={() => setExpanded(false)}>
+          <SweepTable
+            curve={curve}
+            isBB84={isBB84}
+            axis={axis}
+            formatAxisValue={formatAxisValue}
+            maxHeight="100%"
+          />
+        </Modal>
+      )}
     </div>
   );
 }
