@@ -87,13 +87,20 @@ function stubFetch() {
     "fetch",
     vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
-      const body = url.includes("/plugins")
+      const body = url.includes("/config/schema")
+        ? { $defs: { Limits: { properties: {} } } }
+        : url.includes("/config")
+          ? {
+              limits: { max_concurrent_runs: 5, run_history: 20, max_sync_qubits: 200 },
+              contact: { repository: "https://example.test/repo", api_docs: "", email: "a@b.test", github: "", linkedin: "" },
+            }
+          : url.includes("/plugins")
         ? PLUGINS
-        : url.includes("/schema")
-          ? { title: "SimulationConfig", properties: {} }
-          : url.includes("/simulate") || url.includes("/sweep")
-            ? { run_id: "test-run", status: "running" }
-            : { run_id: "test-run", status: "completed", events: 3, result: RESULT, error: null };
+          : url.includes("/schema")
+            ? { title: "SimulationConfig", properties: {} }
+            : url.includes("/simulate") || url.includes("/sweep")
+              ? { run_id: "test-run", status: "running" }
+              : { run_id: "test-run", status: "completed", events: 3, result: RESULT, error: null };
       return new Response(JSON.stringify(body), {
         status: 200,
         headers: { "Content-Type": "application/json" },
@@ -331,6 +338,35 @@ describe("Several repetitions", () => {
   });
 });
 
+describe("Stopping a run", () => {
+  it("turns the same button into its opposite, on every screen", async () => {
+    for (const [element, path, start] of [
+      [<Configuration />, "/run", "Esegui la simulazione"],
+      [<Exploration />, "/explore", "Esegui lo sweep"],
+      [<Comparison />, "/compare", "Esegui la simulazione"],
+      [<Envelope />, "/envelope", "Calcola l'inviluppo"],
+    ] as const) {
+      cleanupAndMount(element, path);
+      fireEvent.click(screen.getByText(start));
+      // One button, because there is only ever one thing to do with a
+      // simulation: start it, or stop the one that is going.
+      await waitFor(() => expect(screen.getByText("Interrompi")).toBeDefined());
+      expect(screen.queryByText(start)).toBeNull();
+    }
+  });
+
+  it("returns to idle when it is stopped", async () => {
+    mount(<Exploration />, "/explore");
+    fireEvent.click(screen.getByText("Esegui lo sweep"));
+    await waitFor(() => expect(screen.getByText("Interrompi")).toBeDefined());
+
+    fireEvent.click(screen.getByText("Interrompi"));
+    await waitFor(() => expect(screen.queryByText("Interrompi")).toBeNull());
+    // And the controls it had locked come back.
+    expect((screen.getByLabelText("Seed") as HTMLInputElement).disabled).toBe(false);
+  });
+});
+
 describe("While a run is in flight", () => {
   it("locks every control until it finishes", async () => {
     mount(<Configuration />, "/run");
@@ -505,6 +541,33 @@ describe("Exploration", () => {
   });
 });
 
+describe("The seed", () => {
+  it("is on every screen that launches something", () => {
+    for (const [element, path] of [
+      [<Configuration />, "/run"],
+      [<Exploration />, "/explore"],
+      [<Comparison />, "/compare"],
+      [<Envelope />, "/envelope"],
+    ] as const) {
+      cleanupAndMount(element, path);
+      // Drawn per visit, so pressing Run twice is not the same run twice; and
+      // always visible, so any result can be reproduced by typing it back in.
+      const seed = Number((screen.getByLabelText("Seed") as HTMLInputElement).value);
+      expect(seed).toBeGreaterThan(9_999_999);
+      expect(screen.getByLabelText("Nuovo seed")).toBeDefined();
+    }
+  });
+
+  it("rolls to something else and clears what the old one produced", async () => {
+    mount(<Exploration />, "/explore");
+    const field = screen.getByLabelText("Seed") as HTMLInputElement;
+    const before = field.value;
+    fireEvent.click(screen.getByLabelText("Nuovo seed"));
+    expect(field.value).not.toBe(before);
+    expect(Number(field.value)).toBeGreaterThan(9_999_999);
+  });
+});
+
 describe("The exported figure", () => {
   it("defaults to light, whatever the interface is wearing", () => {
     mount(<Exploration />, "/explore");
@@ -566,7 +629,7 @@ describe("The exported figure", () => {
     const text = svg.textContent ?? "";
     for (const needed of [
       "QBER(L)",                 // the title
-      "seed 20260818",           // what produced it
+      "seed ",                   // what produced it, whatever it drew
       "base Z (↕)",              // the legend
       "soglia QBER",             // the decision rule
       "QBER stimato (%)",        // the y axis
@@ -632,7 +695,7 @@ describe("The operating envelope", () => {
     const text = svg.textContent ?? "";
     // The same rule as the sweep chart: an export serialises the SVG and
     // nothing else, so labels laid over it as HTML would be lost.
-    for (const needed of ["Inviluppo operativo", "seed 20260818", "chiave accettata", "km", "%"]) {
+    for (const needed of ["Inviluppo operativo", "seed ", "chiave accettata", "km", "%"]) {
       expect(text).toContain(needed);
     }
   });
@@ -659,6 +722,53 @@ describe("Moving between the screens", () => {
     // says which one is open, where a row of arrows never did.
     expect(tabs.getByText("Sweep").getAttribute("aria-current")).toBe("page");
     expect(tabs.getByText("Run").getAttribute("aria-current")).toBeNull();
+  });
+
+  it("opens the settings from every screen, not just the one without a blur", async () => {
+    // `backdrop-filter` on a sticky header makes it the containing block for
+    // anything `position: fixed` inside it, so the panel was being laid out in a
+    // fifty-pixel strip. Three of the four headers blur; Run does not, which is
+    // why it was the only one that worked.
+    for (const [screen_, path] of [
+      [<Configuration />, "/run"],
+      [<Exploration />, "/explore"],
+      [<Comparison />, "/compare"],
+      [<Envelope />, "/envelope"],
+    ] as const) {
+      cleanupAndMount(screen_, path);
+      fireEvent.click(screen.getByLabelText("Impostazioni"));
+      await waitFor(() => expect(screen.getByRole("dialog", { name: "Impostazioni" })).toBeDefined());
+    }
+  });
+
+  it("puts the same bar on every tool screen, Run included", () => {
+    mount(<Configuration />, "/run");
+    // It used to sit in the sidebar here and in the top bar everywhere else.
+    expect(screen.getByRole("navigation", { name: "Screens" })).toBeDefined();
+    expect(screen.getByLabelText("Cambia tema")).toBeDefined();
+    expect(screen.getByLabelText("Impostazioni")).toBeDefined();
+  });
+
+  it("opens the settings and confirms before writing", async () => {
+    mount(<Exploration />, "/explore");
+    fireEvent.click(screen.getByLabelText("Impostazioni"));
+
+    await waitFor(() => expect(screen.getByText("Limiti del servizio")).toBeDefined());
+    expect(screen.getByLabelText("Run simultanee")).toBeDefined();
+    // The footer, not a form for it: the contacts live in the file and this
+    // shows what they produce.
+    expect(screen.getByText(/Simulatore didattico/)).toBeDefined();
+    expect(screen.queryByLabelText("Repository")).toBeNull();
+    fireEvent.click(screen.getByText("Salva"));
+    // Writing reaches past the page, so it is asked for once — and the answer
+    // says when it will take effect, which is the other half of the question.
+    await waitFor(() => expect(screen.getByText("Salvare le impostazioni?")).toBeDefined());
+    expect(screen.getByText(/dalla prossima richiesta/)).toBeDefined();
+
+    // Cancelling writes nothing.
+    fireEvent.click(screen.getByText("Annulla"));
+    await waitFor(() => expect(screen.queryByText("Salvare le impostazioni?")).toBeNull());
+    expect(screen.getByText("Limiti del servizio")).toBeDefined();
   });
 
   it("names them in English whatever the interface language", () => {

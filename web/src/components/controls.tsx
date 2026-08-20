@@ -263,34 +263,51 @@ export function Kicker({ children }: { children: ReactNode }) {
   return <span className="kicker">{children}</span>;
 }
 
-/** The primary action. Disabled while a run is in flight. */
+/**
+ * The primary action, which becomes its own opposite while it runs.
+ *
+ * One button rather than two, because there is only ever one thing to do with a
+ * simulation: start it, or stop the one that is going. A greyed-out Run said
+ * "wait" and offered no way out of a sweep that turns out to be forty points
+ * long.
+ *
+ * Red, and not merely a different word: stopping discards work, and the colour
+ * is the one this interface already uses for a key that was thrown away.
+ */
 export function RunButton({
   label,
+  stopLabel,
   busy,
   onClick,
+  onStop,
 }: {
   label: string;
+  /** Shown while running. Without `onStop` the button stays disabled instead. */
+  stopLabel?: string;
   busy: boolean;
   onClick: () => void;
+  onStop?: () => void;
 }) {
+  const stoppable = busy && !!onStop;
   return (
     <button
       type="button"
-      onClick={onClick}
-      disabled={busy}
+      onClick={stoppable ? onStop : onClick}
+      disabled={busy && !stoppable}
       style={{
         padding: 13,
         borderRadius: 11,
-        border: `1px solid ${busy ? "var(--line)" : "transparent"}`,
-        background: busy ? "var(--panel-2)" : "var(--blue)",
-        color: busy ? "var(--fg-2)" : "#fff",
+        border: `1px solid ${busy && !stoppable ? "var(--line)" : "transparent"}`,
+        background: stoppable ? "var(--red)" : busy ? "var(--panel-2)" : "var(--blue)",
+        color: busy && !stoppable ? "var(--fg-2)" : "#fff",
         fontSize: 14,
         fontWeight: 590,
-        cursor: busy ? "default" : "pointer",
-        boxShadow: busy ? "none" : "0 10px 24px -16px #000, inset 0 1px 0 rgba(255,255,255,.22)",
+        cursor: busy && !stoppable ? "default" : "pointer",
+        boxShadow:
+          busy && !stoppable ? "none" : "0 10px 24px -16px #000, inset 0 1px 0 rgba(255,255,255,.22)",
       }}
     >
-      {label}
+      {stoppable ? stopLabel : label}
     </button>
   );
 }

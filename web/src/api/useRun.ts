@@ -8,7 +8,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { startRun, startSweep } from "./client";
+import { cancelRun, startRun, startSweep } from "./client";
 import type {
   AnyEvent,
   RunResult,
@@ -45,6 +45,8 @@ const EMPTY: RunView = {
 export function useRun() {
   const [view, setView] = useState<RunView>(EMPTY);
   const subscription = useRef<Subscription | null>(null);
+  /** The run being followed, readable from a callback that must not re-bind. */
+  const viewRef = useRef<string | null>(null);
 
   // A run left following after the component goes away would keep a socket open
   // and call setState on something unmounted.
@@ -52,6 +54,7 @@ export function useRun() {
 
   const follow = useCallback((runId: string) => {
     subscription.current?.close();
+    viewRef.current = runId;
     setView({ ...EMPTY, runId, isRunning: true });
 
     subscription.current = subscribe(runId, {
@@ -107,13 +110,28 @@ export function useRun() {
     [follow],
   );
 
+  /**
+   * Stop the run, and stop watching it.
+   *
+   * Both halves matter. The server is told, so the slot it holds against the
+   * concurrency ceiling is released at the next event rather than at the end;
+   * and the socket is closed here, so the interface returns to idle without
+   * waiting for a confirmation it does not need.
+   */
+  const cancel = useCallback(() => {
+    const id = viewRef.current;
+    if (id) void cancelRun(id).catch(() => {});
+    subscription.current?.close();
+    setView((current) => ({ ...current, isRunning: false }));
+  }, []);
+
   const reset = useCallback(() => {
     subscription.current?.close();
     subscription.current = null;
     setView(EMPTY);
   }, []);
 
-  return { ...view, launch, launchSweep, follow, reset };
+  return { ...view, launch, launchSweep, follow, cancel, reset };
 }
 
 /**

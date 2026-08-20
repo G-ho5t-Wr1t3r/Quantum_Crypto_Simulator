@@ -245,7 +245,11 @@ export function isTerminal(event: AnyEvent): boolean {
 // Run lifecycle
 // ---------------------------------------------------------------------------
 
-export type RunStatus = "running" | "completed" | "failed";
+/**
+ * `cancelled` is neither of the other two: nothing went wrong, and the result
+ * is partial — a sweep stopped halfway keeps the points it reached.
+ */
+export type RunStatus = "running" | "completed" | "failed" | "cancelled";
 
 export interface RunHandle {
   run_id: string;
@@ -300,4 +304,35 @@ export interface Plugins {
   attacks: Record<string, string[]>;
   positions: string[];
   topologies: Record<ProtocolKind, Topology>;
+}
+
+
+// ---------------------------------------------------------------------------
+// The service's own settings
+// ---------------------------------------------------------------------------
+
+/**
+ * What the service refuses to do, and at what point.
+ *
+ * Served rather than compiled in, so the numbers a settings panel shows are the
+ * ones actually being enforced — read from the same file at the same moment.
+ */
+export interface Limits {
+  max_concurrent_runs: number;
+  run_history: number;
+  max_sync_qubits: number;
+}
+
+/** What the landing page prints in its footer. Display only, nothing enforced. */
+export interface Contact {
+  repository: string;
+  api_docs: string;
+  email: string;
+  github: string;
+  linkedin: string;
+}
+
+export interface AppConfig {
+  limits: Limits;
+  contact: Contact;
 }

@@ -12,7 +12,7 @@
 import { useState } from "react";
 
 import { Kicker, RunButton, Segmented, Slider } from "../../components/controls";
-import { LangSwitch, ThemeSwitch } from "../../components/AppearanceControls";
+import { SeedField } from "../../components/SeedField";
 import type { Plugins, ProtocolKind } from "../../api/contract";
 import { useSchemaBounds, within } from "../../api/queries";
 import { useCopy, useLocale } from "../../i18n/useCopy";
@@ -75,6 +75,7 @@ export function Sidebar({
   plugins,
   busy,
   onRun,
+  onStop,
   onReset,
   onCopy,
   copied,
@@ -89,6 +90,7 @@ export function Sidebar({
   plugins: Plugins | undefined;
   busy: boolean;
   onRun: () => void;
+  onStop: () => void;
   onReset: () => void;
   onCopy: () => void;
   copied: boolean;
@@ -143,10 +145,6 @@ export function Sidebar({
         <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
           <span style={{ fontSize: 16.5, fontWeight: 600, letterSpacing: "-.02em" }}>{t.brand}</span>
           <span style={{ fontSize: 12, color: "var(--fg-3)" }}>{t.subtitle}</span>
-        </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <LangSwitch />
-          <ThemeSwitch />
         </div>
       </div>
 
@@ -273,53 +271,7 @@ export function Sidebar({
             onChange={(value) => set("trials", value)}
           disabled={busy}
           />
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-              <span style={{ fontSize: 13, color: "var(--fg-2)" }}>{t.seed}</span>
-              <span style={{ fontSize: 11, color: "var(--fg-3)" }}>{t.seedRequired}</span>
-            </div>
-            <div style={{ display: "flex", gap: 7 }}>
-              <input
-                value={params.seed}
-                aria-label={t.seed}
-                disabled={busy}
-                onChange={(event) =>
-                  set("seed", parseInt(event.target.value.replace(/\D/g, "") || "0", 10))
-                }
-                className="mono"
-                style={{
-                  flex: 1,
-                  minWidth: 0,
-                  background: "var(--panel)",
-                  border: "1px solid var(--line)",
-                  borderRadius: 9,
-                  padding: "9px 11px",
-                  color: "var(--fg)",
-                  fontSize: 12.5,
-                  outline: "none",
-                }}
-              />
-              <button
-                type="button"
-                title={t.randomize}
-                disabled={busy}
-                onClick={() => set("seed", Math.floor(Math.random() * 9e7) + 1e7)}
-                style={{
-                  flex: "none",
-                  width: 38,
-                  border: "1px solid var(--line)",
-                  borderRadius: 9,
-                  background: "var(--panel-2)",
-                  color: "var(--fg-2)",
-                  cursor: "pointer",
-                  fontSize: 14,
-                  boxShadow: "inset 0 1px 0 var(--hi)",
-                }}
-              >
-                ⟳
-              </button>
-            </div>
-          </div>
+          <SeedField value={params.seed} onChange={(seed) => set("seed", seed)} disabled={busy} />
         </section>
 
         <section style={{ ...SECTION, borderBottom: "none", paddingBottom: 22 }}>
@@ -483,7 +435,7 @@ export function Sidebar({
           gap: 10,
         }}
       >
-        <RunButton label={busy ? `${t.running}…` : t.runNow} busy={busy} onClick={onRun} />
+        <RunButton label={t.runNow} stopLabel={t.stop} busy={busy} onClick={onRun} onStop={onStop} />
         <button
           type="button"
           onClick={onReset}

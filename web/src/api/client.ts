@@ -8,10 +8,12 @@
  */
 
 import type {
+  AppConfig,
   Plugins,
   RunHandle,
   RunResult,
   RunSummary,
+  RunStatus,
   SimulationConfig,
   SimulationEvent,
   SweepRequest,
@@ -130,6 +132,31 @@ export const startSweep = (sweep: SweepRequest) =>
  */
 export const runSync = (config: SimulationConfig) =>
   request<RunResult>("/simulate/sync", { method: "POST", body: JSON.stringify(config) });
+
+/** The service's own settings: its limits, and the footer's contact details. */
+export const getConfig = () => request<AppConfig>("/config");
+
+/**
+ * Replace them, in force from the next request.
+ *
+ * Worth knowing what this is: the service has no authentication anywhere, so
+ * anyone who can reach the page can raise the ceiling the machine is protected
+ * by. Fine on a laptop or a private network, not on an open one.
+ */
+export const saveConfig = (config: AppConfig) =>
+  request<AppConfig>("/config", { method: "PUT", body: JSON.stringify(config) });
+
+/**
+ * Ask a run to stop at its next event.
+ *
+ * Between events is as fine-grained as the engine allows: a trial and a sweep
+ * point are each one indivisible computation. So a sweep stops at its next
+ * point, while a single trial runs to its end whatever is asked.
+ */
+export const cancelRun = (runId: string) =>
+  request<{ run_id: string; status: RunStatus; cancelled: boolean }>(`/runs/${runId}/cancel`, {
+    method: "POST",
+  });
 
 export const getRun = (runId: string) => request<RunSummary>(`/runs/${runId}`);
 

@@ -13,12 +13,8 @@
 
 import { Link } from "react-router-dom";
 
+import { useAppConfig } from "../api/queries";
 import { useCopy } from "../i18n/useCopy";
-
-const REPOSITORY = "https://github.com/G-ho5t-Wr1t3r/Quantum_Crypto_Simulator";
-const GITHUB = "https://github.com/G-ho5t-Wr1t3r";
-const LINKEDIN = "https://www.linkedin.com/in/giovanni-lorenzo-murfuni-38655a309/";
-const EMAIL = "contatti.giovannimurfuni@gmail.com";
 
 interface Item {
   label: string;
@@ -73,6 +69,11 @@ function Column({ title, items }: { title: string; items: Item[] }) {
 
 export function Footer() {
   const t = useCopy();
+  // From the settings, so changing them there changes what is printed here
+  // rather than in two places that can disagree. An address left blank falls
+  // back to "coming soon" on its own, because `href` stays undefined.
+  const contact = useAppConfig().data?.contact;
+  const link = (value: string | undefined) => (value ? value : undefined);
   return (
     <footer
       style={{
@@ -104,8 +105,8 @@ export function Footer() {
           <Column
             title={t.colProject}
             items={[
-              { label: t.linkRepo, href: REPOSITORY },
-              { label: t.linkApi },
+              { label: t.linkRepo, href: link(contact?.repository) },
+              { label: t.linkApi, href: link(contact?.api_docs) },
               { label: t.linkConfig, to: "/run" },
               { label: t.linkExplore, to: "/explore" },
               { label: t.linkCompare, to: "/compare" },
@@ -115,9 +116,9 @@ export function Footer() {
           <Column
             title={t.colContact}
             items={[
-              { label: t.linkEmail, href: `mailto:${EMAIL}` },
-              { label: t.linkGithub, href: GITHUB },
-              { label: t.linkLinkedin, href: LINKEDIN },
+              { label: t.linkEmail, href: contact?.email ? `mailto:${contact.email}` : undefined },
+              { label: t.linkGithub, href: link(contact?.github) },
+              { label: t.linkLinkedin, href: link(contact?.linkedin) },
             ]}
           />
         </div>

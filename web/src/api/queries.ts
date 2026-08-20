@@ -9,11 +9,32 @@
  * a socket, so polling it would be re-fetching what has already arrived.
  */
 
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { getPlugins, getSchema } from "./client";
+import { getConfig, getPlugins, getSchema, saveConfig } from "./client";
+import type { AppConfig } from "./contract";
 
 const FOREVER = { staleTime: Infinity, gcTime: Infinity } as const;
+
+/**
+ * The settings, cached but not forever.
+ *
+ * Unlike the plugin list these can change while the page is open — that is what
+ * the settings panel is for — so they are refetched rather than pinned.
+ */
+export function useAppConfig() {
+  return useQuery({ queryKey: ["config"], queryFn: getConfig, staleTime: 30_000 });
+}
+
+export function useSaveConfig() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (config: AppConfig) => saveConfig(config),
+    // Seeded with the answer rather than refetched: the response is the file
+    // as written, so asking again would be asking a question already answered.
+    onSuccess: (saved) => client.setQueryData(["config"], saved),
+  });
+}
 
 export function usePlugins() {
   return useQuery({ queryKey: ["plugins"], queryFn: getPlugins, ...FOREVER });

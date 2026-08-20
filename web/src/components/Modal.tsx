@@ -8,9 +8,18 @@
  *
  * The close is deferred by the length of that animation, which is the only
  * reason this holds state at all.
+ *
+ * RENDERED INTO `document.body`, and this is not a detail. A `position: fixed`
+ * element is only positioned against the viewport while no ancestor has made
+ * itself a containing block — and `backdrop-filter` does exactly that, as do
+ * `transform` and `filter`. Three of the four screens blur their sticky header,
+ * so a panel opened from the button that lives there was being laid out inside
+ * a fifty-pixel-tall strip and clipped out of sight. Rendering outside the tree
+ * puts it beyond the reach of whatever the page does to itself.
  */
 
 import { useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import type { ReactNode } from "react";
 
 import { useReducedMotion } from "../app/appearance";
@@ -21,11 +30,27 @@ export function Modal({
   title,
   onClose,
   closeLabel,
+  actions,
+  elevation = 40,
+  width = "min(1100px, 100%)",
   children,
 }: {
   title: string;
   onClose: () => void;
   closeLabel: string;
+  /** What goes beside the close button: the panel's own primary action. */
+  actions?: ReactNode;
+  /** Raised when one panel opens over another. */
+  elevation?: number;
+  /**
+   * How wide it opens.
+   *
+   * A panel sized for a table of sweep points is far too wide for a question
+   * with two buttons: a line of text stretched across a thousand pixels is one
+   * the eye has to track back across, and the two buttons end up in different
+   * postcodes.
+   */
+  width?: string;
   children: ReactNode;
 }) {
   const reduced = useReducedMotion();
@@ -48,7 +73,7 @@ export function Modal({
     return () => window.removeEventListener("keydown", onKey);
   }, [dismiss]);
 
-  return (
+  return createPortal(
     <div
       role="dialog"
       aria-modal="true"
@@ -57,7 +82,7 @@ export function Modal({
       style={{
         position: "fixed",
         inset: 0,
-        zIndex: 40,
+        zIndex: elevation,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -73,7 +98,7 @@ export function Modal({
         style={{
           display: "flex",
           flexDirection: "column",
-          width: "min(1100px, 100%)",
+          width,
           maxHeight: "100%",
           border: "1px solid var(--line)",
           borderRadius: 18,
@@ -96,7 +121,9 @@ export function Modal({
           }}
         >
           <span className="kicker">{title}</span>
-          <button
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            {actions}
+            <button
             type="button"
             onClick={dismiss}
             aria-label={closeLabel}
@@ -126,12 +153,14 @@ export function Modal({
               event.currentTarget.style.color = "var(--fg-2)";
             }}
           >
-            ✕
-          </button>
+              ✕
+            </button>
+          </div>
         </div>
 
         <div style={{ overflow: "auto", padding: "4px 20px 20px" }}>{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

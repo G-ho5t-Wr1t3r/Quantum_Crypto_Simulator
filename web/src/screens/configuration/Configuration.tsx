@@ -15,7 +15,7 @@ import { useSearchParams } from "react-router-dom";
 import { ApiError } from "../../api/client";
 import { copyText } from "../../lib/clipboard";
 import { usePlugins } from "../../api/queries";
-import { ScreenTabs } from "../../components/ScreenTabs";
+import { TopBarControls } from "../../components/ScreenTabs";
 import { useReducedMotion } from "../../app/appearance";
 import { useRun } from "../../api/useRun";
 import type { ProtocolKind } from "../../api/contract";
@@ -172,6 +172,7 @@ export default function Configuration() {
         plugins={plugins.data}
         busy={run.isRunning}
         onRun={launch}
+        onStop={run.cancel}
         onReset={reset}
         onCopy={() => void copyConfig()}
         copied={copied}
@@ -238,7 +239,7 @@ export default function Configuration() {
                 </div>
               );
             })}
-            <ScreenTabs />
+            <TopBarControls />
           </div>
         </header>
 

@@ -11,6 +11,7 @@
 import { useCallback, useMemo, useState } from "react";
 
 import type { ProtocolKind, SimulationConfig } from "../../api/contract";
+import { rollSeed } from "../../components/SeedField";
 import { gammaFromLength } from "../../lib/physics";
 
 export interface Params {
@@ -40,11 +41,19 @@ export interface Params {
   chshConfidence: number;
 }
 
+/**
+ * The starting point, except for the seed.
+ *
+ * That one is drawn per visit rather than fixed: pressing Run twice with a
+ * constant seed produced the same numbers and looked like nothing had happened.
+ * It stays a control and is printed on every exported figure, so a result can
+ * still be reproduced by typing it back in.
+ */
 export const DEFAULT_PARAMS: Params = {
   protocol: "bb84",
   nQubits: 2000,
   trials: 1,
-  seed: 20260818,
+  seed: 0,
   channelKind: "amplitude_damping",
   gamma: 0.08,
   attackKind: "intercept_resend",
@@ -55,14 +64,18 @@ export const DEFAULT_PARAMS: Params = {
 };
 
 export function useConfiguration(initialProtocol: ProtocolKind) {
-  const [params, setParams] = useState<Params>({ ...DEFAULT_PARAMS, protocol: initialProtocol });
+  const [params, setParams] = useState<Params>(() => ({
+    ...DEFAULT_PARAMS,
+    protocol: initialProtocol,
+    seed: rollSeed(),
+  }));
   const [selected, setSelected] = useState<string | null>(null);
 
   const set = useCallback(<K extends keyof Params>(key: K, value: Params[K]) => {
     setParams((current) => ({ ...current, [key]: value }));
   }, []);
 
-  const reset = useCallback(() => setParams({ ...DEFAULT_PARAMS }), []);
+  const reset = useCallback(() => setParams({ ...DEFAULT_PARAMS, seed: rollSeed() }), []);
 
   /** The damping actually in force; zero on an ideal line. */
   const gamma = useMemo(

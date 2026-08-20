@@ -12,7 +12,12 @@
  * two people cannot use to refer to the same thing.
  */
 
+import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
+
+import { useAppearance } from "../app/appearance";
+import { useCopy } from "../i18n/useCopy";
+import { Settings } from "./Settings";
 
 const TABS = [
   { to: "/run", label: "Run" },
@@ -62,5 +67,94 @@ export function ScreenTabs() {
         );
       })}
     </nav>
+  );
+}
+
+
+/**
+ * Light or dark, in one press.
+ *
+ * A sun and a moon rather than three words: the theme is the one setting a
+ * reader changes on impulse, and a segmented control with an Auto option asked
+ * them to think about it. Auto is still what a fresh visit gets — the toggle
+ * only appears to have an opinion once someone expresses one.
+ */
+export function ThemeToggle() {
+  const { theme, setChoice } = useAppearance();
+  const t = useCopy();
+  const next = theme === "dark" ? "light" : "dark";
+
+  return (
+    <button
+      type="button"
+      onClick={() => setChoice(next)}
+      aria-label={t.themeToggle}
+      title={t.themeToggle}
+      style={{
+        width: 36,
+        height: 36,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        border: "1px solid var(--line)",
+        borderRadius: 10,
+        background: "var(--panel-2)",
+        color: "var(--fg-2)",
+        fontSize: 15,
+        lineHeight: 1,
+        cursor: "pointer",
+        flex: "none",
+        boxShadow: "inset 0 1px 0 var(--hi)",
+      }}
+    >
+      {theme === "dark" ? "☀" : "☾"}
+    </button>
+  );
+}
+
+/** The gear, and the panel it opens. */
+export function SettingsButton() {
+  const t = useCopy();
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        aria-label={t.settings}
+        title={t.settings}
+        style={{
+          width: 36,
+          height: 36,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          border: "1px solid var(--line)",
+          borderRadius: 10,
+          background: "var(--panel-2)",
+          color: "var(--fg-2)",
+          fontSize: 15,
+          lineHeight: 1,
+          cursor: "pointer",
+          flex: "none",
+          boxShadow: "inset 0 1px 0 var(--hi)",
+        }}
+      >
+        ⚙
+      </button>
+      {open && <Settings onClose={() => setOpen(false)} />}
+    </>
+  );
+}
+
+/** Tabs, theme and settings: the same bar on every tool screen. */
+export function TopBarControls() {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, flex: "none" }}>
+      <ScreenTabs />
+      <ThemeToggle />
+      <SettingsButton />
+    </div>
   );
 }
