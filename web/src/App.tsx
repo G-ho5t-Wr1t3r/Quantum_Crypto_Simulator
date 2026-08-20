@@ -4,6 +4,7 @@ import Landing from "./screens/landing/Landing";
 import Configuration from "./screens/configuration/Configuration";
 import Exploration from "./screens/exploration/Exploration";
 import Comparison from "./screens/comparison/Comparison";
+import Envelope from "./screens/envelope/Envelope";
 
 /**
  * A route change, softened.
@@ -66,6 +67,14 @@ export default function App() {
         element={
           <Screen>
             <Comparison />
+          </Screen>
+        }
+      />
+      <Route
+        path="/envelope"
+        element={
+          <Screen>
+            <Envelope />
           </Screen>
         }
       />

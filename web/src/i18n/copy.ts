@@ -279,7 +279,6 @@ const it = {
   explorationTitle: "Modalità esplorazione",
   back: "Configurazione",
   axisLabel: "Asse dello sweep",
-  axisHint: "Ogni punto dell'asse è una run completa: lo sweep restituisce una curva, non un numero.",
   axes: [
     { id: "length_km", label: "Attenuazione del canale", field: "length_km · γ" },
     { id: "attack_fraction", label: "Frazione intercettata", field: "attack_fraction" },
@@ -342,61 +341,37 @@ const it = {
 
   // Comparison -------------------------------------------------------------
   comparisonTitle: "Confronto rumore vs attacco",
-  targetLabel: "QBER bersaglio — identico sui due lati",
-  targetHint:
-    "Entrambe le run sono ritarate per produrre esattamente questo QBER medio: a sinistra col damping, a destra con la frazione intercettata.",
-  viewLabel: "Cosa mostro",
-  viewSplit: "Separato per base",
-  viewMean: "Solo media",
-  viewHintSplit: "Z e X separate: l'asimmetria del canale diventa visibile.",
-  viewHintMean: "Una sola cifra per lato — è la vista che cancella la differenza.",
+  fibreControl: "Lunghezza della fibra (canale reale)",
+  fractionControl: "Frazione intercettata (canale ideale)",
+  stripAll: "tutte le posizioni",
+  e91NoFingerprint:
+    "In E91 il sifting non produce due basi da confrontare, e S non le sostituisce: a parità di QBER lo scarto fra i due S sta dentro l'incertezza. S certifica che la correlazione è degradata, non da cosa.",
   asymShort: "asimmetria Z/X",
   stripTitle: "Errori per posizione, divisi per base",
-  stripTitleMean: "Errori per posizione, basi mediate",
-  stripNoteMean:
-    "Senza la divisione per base restano solo i conteggi totali: i due lati mostrano la stessa densità di errori.",
-  chartSplit: "QBER per base contro il bersaglio",
-  chartMean: "QBER medio contro il bersaglio",
+  stripTitlePlain: "Errori per posizione",
+  abortTrigger: "Abort trigger: QBER / CHSH S",
+  bb84Fingerprint:
+    "L'amplitude damping degrada la base rettilinea circa il doppio della diagonale, perché agisce sulla popolazione dello stato eccitato. Un intercept-resend rimisura in una base casuale e sbaglia in modo simmetrico: il rapporto Z/X scende verso 1. È l'unico osservabile qui che distingue le due cause.",
+  chartTitle: "QBER medio e per base, contro il bersaglio",
   barMean: "QBER medio (Z e X mediate)",
   zRow: "base Z (↕)",
   xRow: "base X (⤢)",
-  allRow: "tutte le basi",
   sides: [
     {
       kicker: "LATO A",
       name: "Solo rumore di canale",
       tag: "nessun attaccante",
-      desc: "Fibra reale, nessuno in ascolto: il damping è tarato per portare il QBER medio esattamente al bersaglio.",
+      desc: "Fibra reale, nessuno in ascolto: errori di natura fisica.",
       note: "Il damping colpisce la base Z circa il doppio della X: la firma resta nei conteggi separati.",
     },
     {
       kicker: "LATO B",
       name: "Intercettazione parziale",
       tag: "Eve sul canale",
-      desc: "Canale quasi pulito, ma Eve misura e reinvia una frazione dei qubit — scelta per dare lo stesso QBER medio.",
+      desc: "Canale ideale, nessun rumore: errori causati da Eve.",
       note: "L'intercept-resend sbaglia allo stesso modo nelle due basi: nessuna asimmetria da cui distinguerlo.",
     },
   ],
-  insights: [
-    {
-      step: "01",
-      title: "Il QBER medio non è una prova",
-      body: "Una soglia sul solo QBER medio non separa una fibra rumorosa da un attaccante prudente: la stessa cifra si ottiene in entrambi i modi, e la decisione di sicurezza finisce per poggiare su un numero ambiguo.",
-    },
-    {
-      step: "02",
-      title: "L'asimmetria Z/X è la firma",
-      body: "L'amplitude damping degrada la base rettilinea circa il doppio della diagonale, perché agisce sulla popolazione dello stato eccitato. Un intercept-resend, che rimisura in una base casuale, sbaglia in modo simmetrico: il rapporto Z/X scende verso 1.",
-    },
-    {
-      step: "03",
-      title: "Perché il canale va modellato quantistico",
-      body: "Con un bit-flip classico le due basi si degraderebbero allo stesso modo e questa differenza non esisterebbe: sarebbe impossibile, in simulazione, distinguere rumore e attacco. È la dimostrazione visiva del perché il canale è modellato come amplitude damping e non come flip di bit.",
-    },
-  ],
-  bb84Only: "solo BB84",
-  bb84OnlyWhy:
-    "Il confronto vive sulla separazione per base, e in E91 quella separazione non esiste: non c'è una base rettilinea e una diagonale da mettere a confronto.",
   stripError: "errore",
   stripOk: "bit corretto",
 
@@ -416,6 +391,32 @@ const it = {
   linkEmail: "Contattami",
   linkGithub: "GitHub",
   linkLinkedin: "Linkedin",
+
+  // Envelope ---------------------------------------------------------------
+  envelopeTitle: "Inviluppo operativo",
+  envelopeCta: "Inviluppo",
+  envelopeLead: "Lunghezza / Intercettazione",
+  maxLength: "Lunghezza massima",
+  lengthSteps: "Passi in lunghezza",
+  fractionSteps: "Passi in intercettazione",
+  qubitsPerCell: "Qubit per cella",
+  runMap: "Calcola l'inviluppo",
+  mapping: "Calcolo in corso",
+  stopMap: "Interrompi",
+  cellsLabel: "celle",
+  estimated: "stimati",
+  axisFraction: "frazione intercettata",
+  axisLength: "lunghezza della fibra (km)",
+  legendAccepted: "chiave accettata",
+  legendRejected: "chiave scartata",
+  legendKnows: "Conoscenza Eve (0–50 %)",
+  reach: "Portata senza attaccante",
+  reachSub: "oltre, la chiave cade da sola",
+  tolerated: "Intercettazione tollerata a 0 km",
+  toleratedSub: "il limite del protocollo, senza cause fisiche",
+  acceptedCells: "Celle accettate",
+  mapE91Note:
+    "In E91 la conoscenza dell'attaccante non è modellata, quindi le celle accettate sono tutte dello stesso colore: resta la mappa accettata / scartata.",
 
   // Failures ---------------------------------------------------------------
   backendDown: "Backend non raggiungibile. Avvia l'API e ricarica.",
@@ -685,7 +686,6 @@ const en: Copy = {
   explorationTitle: "Exploration mode",
   back: "Configuration",
   axisLabel: "Sweep axis",
-  axisHint: "Every point on the axis is a full run: a sweep returns a curve, not a number.",
   axes: [
     { id: "length_km", label: "Channel attenuation", field: "length_km · γ" },
     { id: "attack_fraction", label: "Intercepted fraction", field: "attack_fraction" },
@@ -747,61 +747,37 @@ const en: Copy = {
   acceptedRuns: "Accepted runs",
 
   comparisonTitle: "Noise vs attack, side by side",
-  targetLabel: "Target QBER — identical on both sides",
-  targetHint:
-    "Both runs are retuned to produce exactly this mean QBER: damping on the left, intercepted fraction on the right.",
-  viewLabel: "What to show",
-  viewSplit: "Split per basis",
-  viewMean: "Mean only",
-  viewHintSplit: "Z and X separated: the channel asymmetry becomes visible.",
-  viewHintMean: "One figure per side — the view that erases the difference.",
+  fibreControl: "Fibre length (real channel)",
+  fractionControl: "Intercepted fraction (ideal channel)",
+  stripAll: "all positions",
+  e91NoFingerprint:
+    "In E91 sifting produces no two bases to compare, and S does not stand in for them: at equal QBER the gap between the two S values sits inside the uncertainty. S certifies that the correlation is degraded, not what degraded it.",
   asymShort: "Z/X asymmetry",
   stripTitle: "Errors per position, split by basis",
-  stripTitleMean: "Errors per position, bases averaged",
-  stripNoteMean:
-    "Without the per-basis split only the totals remain: both sides show the same error density.",
-  chartSplit: "Per-basis QBER against the target",
-  chartMean: "Mean QBER against the target",
+  stripTitlePlain: "Errors per position",
+  abortTrigger: "Abort trigger: QBER / CHSH S",
+  bb84Fingerprint:
+    "Amplitude damping degrades the rectilinear basis about twice as much as the diagonal one, because it acts on the excited-state population. Intercept-resend re-measures in a random basis and errs symmetrically: the Z/X ratio falls towards 1. It is the only observable here that tells the two causes apart.",
+  chartTitle: "Mean and per-basis QBER against the target",
   barMean: "Mean QBER (Z and X averaged)",
   zRow: "Z basis (↕)",
   xRow: "X basis (⤢)",
-  allRow: "all bases",
   sides: [
     {
       kicker: "SIDE A",
       name: "Channel noise only",
       tag: "no eavesdropper",
-      desc: "A real fibre with nobody listening: damping is tuned to bring the mean QBER exactly to the target.",
+      desc: "A real fibre with nobody listening: errors of physical origin.",
       note: "Damping hits the Z basis about twice as hard as X: the fingerprint survives in the separated counts.",
     },
     {
       kicker: "SIDE B",
       name: "Partial interception",
       tag: "Eve on the channel",
-      desc: "An almost clean channel, but Eve measures and resends a fraction of the qubits — chosen to give the same mean QBER.",
+      desc: "An ideal channel, no noise at all: errors caused by Eve.",
       note: "Intercept-resend errs equally in both bases: no asymmetry left to tell it apart.",
     },
   ],
-  insights: [
-    {
-      step: "01",
-      title: "Mean QBER is not evidence",
-      body: "A threshold on the mean QBER alone cannot separate a noisy fibre from a careful eavesdropper: the same figure arises both ways, and the security decision ends up resting on an ambiguous number.",
-    },
-    {
-      step: "02",
-      title: "The Z/X asymmetry is the fingerprint",
-      body: "Amplitude damping degrades the rectilinear basis about twice as much as the diagonal one, because it acts on the excited-state population. Intercept-resend, which re-measures in a random basis, errs symmetrically: the Z/X ratio falls towards 1.",
-    },
-    {
-      step: "03",
-      title: "Why the channel is modelled quantum",
-      body: "With a classical bit-flip both bases would degrade identically and this difference would not exist: telling noise from attack in simulation would be impossible. It is the visual argument for modelling the channel as amplitude damping rather than a bit flip.",
-    },
-  ],
-  bb84Only: "BB84 only",
-  bb84OnlyWhy:
-    "The comparison rests on the per-basis split, and E91 has no such split: there is no rectilinear and diagonal basis to set against each other.",
   stripError: "error",
   stripOk: "correct bit",
 
@@ -820,6 +796,32 @@ const en: Copy = {
   linkEmail: "Get in touch",
   linkGithub: "GitHub",
   linkLinkedin: "Linkedin",
+
+  // Envelope ---------------------------------------------------------------
+  envelopeTitle: "Operating envelope",
+  envelopeCta: "Envelope",
+  envelopeLead: "Length / interception",
+  maxLength: "Maximum length",
+  lengthSteps: "Length steps",
+  fractionSteps: "Interception steps",
+  qubitsPerCell: "Qubits per cell",
+  runMap: "Compute the envelope",
+  mapping: "Computing",
+  stopMap: "Stop",
+  cellsLabel: "cells",
+  estimated: "estimated",
+  axisFraction: "intercepted fraction",
+  axisLength: "fibre length (km)",
+  legendAccepted: "key accepted",
+  legendRejected: "key discarded",
+  legendKnows: "Eve's knowledge (0–50 %)",
+  reach: "Reach with no eavesdropper",
+  reachSub: "beyond it the key fails on its own",
+  tolerated: "Interception tolerated at 0 km",
+  toleratedSub: "the protocol's own limit, with no physical cause",
+  acceptedCells: "Accepted cells",
+  mapE91Note:
+    "In E91 the eavesdropper's knowledge is not modelled, so the accepted cells are all one colour: what remains is the accepted / discarded map.",
 
   backendDown: "Backend unreachable. Start the API and reload.",
   refused: "Configuration refused",

@@ -39,12 +39,21 @@ export function Segmented<T extends string | null>({
   onChange,
   wide = false,
   label,
+  disabled = false,
   style,
 }: {
   options: Option<T>[];
   value: T;
   onChange: (value: T) => void;
   wide?: boolean;
+  /**
+   * Locked while a run is in flight.
+   *
+   * A control that still moves during a simulation is a control that lies: the
+   * run in progress was launched with the old value, and the reader is left
+   * looking at settings that do not describe what is being computed.
+   */
+  disabled?: boolean;
   /**
    * What this group of choices is for.
    *
@@ -77,8 +86,13 @@ export function Segmented<T extends string | null>({
           role="radio"
           aria-checked={option.id === value}
           title={option.title}
+          disabled={disabled}
           onClick={() => onChange(option.id)}
-          style={segmentStyle(option.id === value, wide)}
+          style={{
+            ...segmentStyle(option.id === value, wide),
+            cursor: disabled ? "default" : "pointer",
+            opacity: disabled && option.id !== value ? 0.45 : 1,
+          }}
         >
           {option.label}
         </button>
@@ -148,6 +162,7 @@ export function Slider({
   step,
   value,
   onChange,
+  disabled = false,
 }: {
   label: string;
   display: string;
@@ -157,6 +172,8 @@ export function Slider({
   step: number;
   value: number;
   onChange: (value: number) => void;
+  /** Locked while a run is in flight; see `Segmented`. */
+  disabled?: boolean;
 }) {
   // Stepping in floating point drifts: 0.1 + 0.005 is not 0.105. Rounding to
   // the grid the step defines keeps the value on it.
@@ -169,13 +186,13 @@ export function Slider({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
-        <span style={{ fontSize: 13, color: "var(--fg-2)" }}>{label}</span>
+        <span style={{ fontSize: 13, color: disabled ? "var(--fg-3)" : "var(--fg-2)" }}>{label}</span>
         <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <Nudge direction="down" onClick={() => nudge(-1)} disabled={value <= min} label={`${label} −`} />
+          <Nudge direction="down" onClick={() => nudge(-1)} disabled={disabled || value <= min} label={`${label} −`} />
           <span className="mono" style={{ fontSize: 12.5, color: "var(--fg)", whiteSpace: "nowrap" }}>
             {display}
           </span>
-          <Nudge direction="up" onClick={() => nudge(1)} disabled={value >= max} label={`${label} +`} />
+          <Nudge direction="up" onClick={() => nudge(1)} disabled={disabled || value >= max} label={`${label} +`} />
         </span>
       </div>
       <input
@@ -185,7 +202,9 @@ export function Slider({
         max={max}
         step={step}
         value={value}
+        disabled={disabled}
         onChange={(event) => onChange(parseFloat(event.target.value))}
+        style={{ opacity: disabled ? 0.5 : 1 }}
       />
       {/* `pre-line`, so a hint that separates two thoughts onto two lines keeps
           them there instead of running them together. */}

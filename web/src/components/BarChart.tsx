@@ -70,14 +70,14 @@ export function BarChart({
   max: number;
   ticks: number[];
   formatTick: (value: number) => string;
-  rule: Rule;
+  rule?: Rule;
   zones?: Zones;
   axisTitle: string;
   /** Stretch to the height of the row, so a pair of charts line up. */
   fill?: boolean;
 }) {
   const pct = (value: number) => Math.min(100, Math.max(0, (value / max) * 100));
-  const rulePct = pct(rule.value);
+  const rulePct = rule ? pct(rule.value) : 0;
   const acceptColor = "var(--mint)";
   const rejectColor = "var(--red)";
 
@@ -95,7 +95,7 @@ export function BarChart({
         ...(fill ? { flex: 1, justifyContent: "center" } : null),
       }}
     >
-      {zones && (
+      {zones && rule && (
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           <div className="mono" style={zoneChip(zones.leftAccepts ? acceptColor : rejectColor, false)}>
             <span style={{ fontSize: 11 }}>◀</span>
@@ -109,7 +109,7 @@ export function BarChart({
       )}
 
       <div style={{ position: "relative", display: "flex", flexDirection: "column", gap: 14 }}>
-        {zones && (
+        {zones && rule && (
           <>
             <div
               style={{
@@ -197,18 +197,20 @@ export function BarChart({
           </div>
         ))}
 
-        <div
-          style={{
-            position: "absolute",
-            left: `${rulePct.toFixed(2)}%`,
-            top: -2,
-            bottom: -4,
-            width: 0,
-            borderLeft: `1.5px dashed ${rule.color}`,
-            zIndex: 3,
-            pointerEvents: "none",
-          }}
-        />
+        {rule && (
+          <div
+            style={{
+              position: "absolute",
+              left: `${rulePct.toFixed(2)}%`,
+              top: -2,
+              bottom: -4,
+              width: 0,
+              borderLeft: `1.5px dashed ${rule.color}`,
+              zIndex: 3,
+              pointerEvents: "none",
+            }}
+          />
+        )}
       </div>
 
       <div style={{ position: "relative", height: 1, background: "var(--line-2)", marginTop: 2 }} />
@@ -232,6 +234,7 @@ export function BarChart({
             </span>
           );
         })}
+        {rule && (
         <span
           className="mono"
           style={{
@@ -247,6 +250,7 @@ export function BarChart({
         >
           ▲ {rule.label}
         </span>
+        )}
       </div>
 
       <span style={{ fontSize: 10.5, color: "var(--fg-3)", textAlign: "center" }}>{axisTitle}</span>

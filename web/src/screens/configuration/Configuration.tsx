@@ -10,11 +10,12 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 
 import { ApiError } from "../../api/client";
 import { copyText } from "../../lib/clipboard";
 import { usePlugins } from "../../api/queries";
+import { ScreenTabs } from "../../components/ScreenTabs";
 import { useReducedMotion } from "../../app/appearance";
 import { useRun } from "../../api/useRun";
 import type { ProtocolKind } from "../../api/contract";
@@ -50,6 +51,26 @@ export default function Configuration() {
 
   const isBB84 = config.params.protocol === "bb84";
   const first = run.trials[0];
+
+  /**
+   * Switching protocol throws the result away and keeps the diagram.
+   *
+   * The network is a picture of what is configured, so it should follow the
+   * choice immediately. The numbers are a record of what was run, and a BB84
+   * result left under an E91 heading would be read as an E91 one — against the
+   * wrong deciding quantity, since the readouts change with the protocol.
+   */
+  const chooseProtocol = useCallback(
+    (next: ProtocolKind) => {
+      if (next === config.params.protocol) return;
+      config.set("protocol", next);
+      config.setSelected(null);
+      setStamp("");
+      setRefusal(null);
+      run.reset();
+    },
+    [config, run],
+  );
 
   // Keyed on the run, so a second launch replays from the beginning instead of
   // continuing wherever the previous one stopped.
@@ -147,6 +168,7 @@ export default function Configuration() {
       <Sidebar
         params={config.params}
         set={config.set}
+        onProtocol={chooseProtocol}
         plugins={plugins.data}
         busy={run.isRunning}
         onRun={launch}
@@ -216,32 +238,7 @@ export default function Configuration() {
                 </div>
               );
             })}
-            {[
-              { to: "/explore", label: t.exploreCta },
-              { to: "/compare", label: t.compareCta },
-            ].map((entry) => (
-              <Link
-                key={entry.to}
-                to={entry.to}
-                style={{
-                  flex: "none",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: 7,
-                  padding: "7px 13px",
-                  borderRadius: 10,
-                  border: "1px solid var(--line)",
-                  background: "var(--panel-2)",
-                  color: "var(--fg)",
-                  fontSize: 12,
-                  fontWeight: 500,
-                  whiteSpace: "nowrap",
-                  boxShadow: "inset 0 1px 0 var(--hi)",
-                }}
-              >
-                {entry.label} →
-              </Link>
-            ))}
+            <ScreenTabs />
           </div>
         </header>
 

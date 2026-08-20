@@ -22,6 +22,7 @@ import Landing from "../screens/landing/Landing";
 import Configuration from "../screens/configuration/Configuration";
 import Exploration from "../screens/exploration/Exploration";
 import Comparison from "../screens/comparison/Comparison";
+import Envelope from "../screens/envelope/Envelope";
 
 const PLUGINS = {
   channels: ["amplitude_damping", "ideal"],
@@ -330,6 +331,39 @@ describe("Several repetitions", () => {
   });
 });
 
+describe("While a run is in flight", () => {
+  it("locks every control until it finishes", async () => {
+    mount(<Configuration />, "/run");
+    const qubits = screen.getByLabelText("Qubit inviati") as HTMLInputElement;
+    const seed = screen.getByLabelText("Seed") as HTMLInputElement;
+    expect(qubits.disabled).toBe(false);
+
+    fireEvent.click(screen.getByText("Esegui la simulazione"));
+
+    // A control that still moves during a simulation lies: the run was launched
+    // with the old value, and the panel would describe settings that are not
+    // the ones being computed.
+    expect(qubits.disabled).toBe(true);
+    expect(seed.disabled).toBe(true);
+    expect((screen.getByLabelText("Qubit inviati +") as HTMLButtonElement).disabled).toBe(true);
+
+    await waitFor(() => expect(qubits.disabled).toBe(false));
+  });
+
+  it("keeps the diagram and drops the numbers when the protocol changes", async () => {
+    mount(<Configuration />, "/run");
+    fireEvent.click(screen.getByText("Esegui la simulazione"));
+    await waitFor(() => expect(screen.getByText("CHIAVE ACCETTATA")).toBeDefined());
+
+    fireEvent.click(screen.getByText("E91"));
+    // The network follows the choice at once; the result was about the other
+    // protocol and is judged on a different quantity.
+    await waitFor(() => expect(screen.queryByText("CHIAVE ACCETTATA")).toBeNull());
+    expect(screen.getByText("IN ATTESA")).toBeDefined();
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("E91");
+  });
+});
+
 describe("Reaching a value exactly", () => {
   it("steps the channel by one increment at a time", () => {
     mount(<Configuration />, "/run");
@@ -545,6 +579,98 @@ describe("The exported figure", () => {
   });
 });
 
+describe("The operating envelope", () => {
+  it("says what it will cost before it is asked to do it", () => {
+    mount(<Envelope />, "/envelope");
+    // A minute of waiting nobody expected is a minute they think is a hang.
+    expect(screen.getByText(/81 celle/)).toBeDefined();
+    // Twice on purpose: cells computed, and cells accepted.
+    expect(screen.getAllByText(/0 \/ 81/).length).toBe(2);
+  });
+
+  it("fills in row by row and reads the two edges off the map", async () => {
+    class RowSocket {
+      onmessage: ((event: { data: string }) => void) | null = null;
+      onerror: (() => void) | null = null;
+      onclose: (() => void) | null = null;
+      constructor() {
+        setTimeout(() => {
+          const send = (payload: unknown) => this.onmessage?.({ data: JSON.stringify(payload) });
+          // Accepted only where nobody is listening: the shape of a real one.
+          const point = (index: number, steps: number) => ({
+            value: index / (steps - 1),
+            qber: 0.02 + index * 0.06,
+            qber_stdev: 0.001,
+            chsh: null,
+            chsh_stdev: null,
+            accepted: index === 0,
+            qber_by_basis: { rectilinear: 0.03, diagonal: 0.01 },
+            eavesdropper_knowledge: index === 0 ? 0 : index * 0.1,
+          });
+          const points = Array.from({ length: 9 }, (_, index) => point(index, 9));
+          send({ kind: "started", index: null, payload: { axis: "attack_fraction", points: 9 } });
+          points.forEach((payload, index) => send({ kind: "sweep_point", index, payload }));
+          send({ kind: "done", index: null, payload: { axis: "attack_fraction", points } });
+          this.onclose?.();
+        }, 0);
+      }
+      close() {}
+    }
+    vi.stubGlobal("WebSocket", RowSocket);
+
+    mount(<Envelope />, "/envelope");
+    fireEvent.click(screen.getByText("Calcola l'inviluppo"));
+
+    await waitFor(() => expect(screen.getByText("81 / 81")).toBeDefined(), { timeout: 3000 });
+    // Nine accepted cells: the F = 0 column of every row.
+    expect(screen.getByText("9 / 81")).toBeDefined();
+  });
+
+  it("carries everything into the figure it exports", async () => {
+    mount(<Envelope />, "/envelope");
+    const svg = document.querySelector("svg")!;
+    const text = svg.textContent ?? "";
+    // The same rule as the sweep chart: an export serialises the SVG and
+    // nothing else, so labels laid over it as HTML would be lost.
+    for (const needed of ["Inviluppo operativo", "seed 20260818", "chiave accettata", "km", "%"]) {
+      expect(text).toContain(needed);
+    }
+  });
+
+  it("drops the map when a parameter changes under it", async () => {
+    mount(<Envelope />, "/envelope");
+    expect(screen.getByText(/81 celle/)).toBeDefined();
+    fireEvent.click(screen.getByLabelText("Passi in lunghezza +"));
+    // A grid computed for nine lengths under a sidebar that says ten is a
+    // figure that no longer matches its own caption.
+    expect(screen.getByText(/90 celle/)).toBeDefined();
+    expect(screen.getAllByText(/0 \/ 90/).length).toBe(2);
+  });
+});
+
+describe("Moving between the screens", () => {
+  it("shows all four as tabs and marks the one you are on", () => {
+    mount(<Exploration />, "/explore");
+    const tabs = within(screen.getByRole("navigation", { name: "Screens" }));
+    for (const label of ["Run", "Sweep", "Compare", "Envelope"]) {
+      expect(tabs.getByText(label)).toBeDefined();
+    }
+    // Four ways of asking about the same simulator, not a sequence: the bar
+    // says which one is open, where a row of arrows never did.
+    expect(tabs.getByText("Sweep").getAttribute("aria-current")).toBe("page");
+    expect(tabs.getByText("Run").getAttribute("aria-current")).toBeNull();
+  });
+
+  it("names them in English whatever the interface language", () => {
+    mount(<Comparison />, "/compare");
+    const tabs = within(screen.getByRole("navigation", { name: "Screens" }));
+    // A name that changes with the language is a name two people cannot use to
+    // refer to the same thing.
+    expect(tabs.getByText("Compare").getAttribute("aria-current")).toBe("page");
+    expect(screen.getByText("LATO A")).toBeDefined();
+  });
+});
+
 describe("The footer", () => {
   it("belongs to the landing page and nowhere else", () => {
     // On a tool screen it is a second thing to scroll past on the way to the
@@ -615,15 +741,66 @@ describe("The sweep table, in full", () => {
 });
 
 describe("Comparison", () => {
-  it("says out loud that it only applies to BB84", () => {
+  it("sets each side by its own parameter, not by a shared target", () => {
     mount(<Comparison />, "/compare");
-    // The screen rests on the per-basis split, which E91 does not have. Someone
-    // arriving from E91 has no other way to know.
-    expect(screen.getByText("solo BB84")).toBeDefined();
+    // "Ten kilometres against an eavesdropper on half the qubits" is a
+    // statement about the world; "both sides at eleven percent" is a statement
+    // about the answer.
+    expect(screen.getByLabelText("Lunghezza della fibra (canale reale)")).toBeDefined();
+    expect(screen.getByLabelText("Frazione intercettata (canale ideale)")).toBeDefined();
+    expect(screen.queryByLabelText(/QBER bersaglio/)).toBeNull();
   });
 
-  it("runs both sides on arrival and reports them", async () => {
+  it("offers both protocols", () => {
     mount(<Comparison />, "/compare");
+    const group = within(screen.getByRole("radiogroup", { name: "Protocollo" }));
+    expect(group.getByRole("radio", { name: "BB84" })).toBeDefined();
+    expect(group.getByRole("radio", { name: "E91" })).toBeDefined();
+  });
+
+  it("isolates one cause per side and explains nothing else", () => {
+    mount(<Comparison />, "/compare");
+    // The screen's job is to run two experiments, not to lecture beside them.
+    expect(screen.queryByText("Il QBER medio non è una prova")).toBeNull();
+    expect(screen.queryByText(/Pareggia/)).toBeNull();
+  });
+
+  it("empties the panels when the protocol changes", async () => {
+    mount(<Comparison />, "/compare");
+    fireEvent.click(screen.getByText("Esegui la simulazione"));
+    await waitFor(() => expect(screen.getAllByText("2.00 %").length).toBeGreaterThan(0));
+
+    // Two BB84 runs under an E91 heading would be read as E91 results, and
+    // against the wrong second observable.
+    const group = within(screen.getByRole("radiogroup", { name: "Protocollo" }));
+    fireEvent.click(group.getByRole("radio", { name: "E91" }));
+    await waitFor(() => expect(screen.queryByText("2.00 %")).toBeNull());
+    expect(screen.getByText("LATO A")).toBeDefined();
+  });
+
+  it("shows the mean and both bases at once, with nothing to toggle", async () => {
+    mount(<Comparison />, "/compare");
+    fireEvent.click(screen.getByText("Esegui la simulazione"));
+    await waitFor(() => expect(screen.getAllByText(/QBER medio \(Z e X mediate\)/).length).toBe(2));
+
+    // Both readings on screen together: the means match across the two sides,
+    // the per-basis bars do not. Switching between them made the reader hold
+    // one half in memory to compare it with the other.
+    expect(screen.getAllByText(/QBER base rettilinea/).length).toBe(2);
+    expect(screen.getAllByText(/QBER base diagonale/).length).toBe(2);
+    expect(screen.queryByText("Cosa mostro")).toBeNull();
+    expect(screen.queryByText("Solo media")).toBeNull();
+  });
+
+  it("shows the two topologies and nothing else until asked", async () => {
+    mount(<Comparison />, "/compare");
+    // Each side is a four thousand qubit simulation: starting two of them
+    // because a page was opened spends time on a question nobody asked.
+    expect(screen.getByText("LATO A")).toBeDefined();
+    expect(screen.getByText("LATO B")).toBeDefined();
+    expect(screen.queryByText("2.00 %")).toBeNull();
+
+    fireEvent.click(screen.getByText("Esegui la simulazione"));
     await waitFor(() => expect(screen.getAllByText("2.00 %").length).toBeGreaterThan(0));
     // Two panels, both fed by a real run rather than by a formula.
     expect(screen.getByText("LATO A")).toBeDefined();

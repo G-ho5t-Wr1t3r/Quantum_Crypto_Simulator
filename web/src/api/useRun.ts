@@ -68,20 +68,41 @@ export function useRun() {
     });
   }, []);
 
+  /**
+   * Marked as running before the request has even been answered.
+   *
+   * The gap between pressing Run and the server accepting is short but real,
+   * and during it the controls would still be live — so a parameter could be
+   * changed under a run that is about to start with the old value. Cleared
+   * again if the launch is refused, because a run that never started is not
+   * running.
+   */
   const launch = useCallback(
     async (config: SimulationConfig) => {
-      const handle = await startRun(config);
-      follow(handle.run_id);
-      return handle;
+      setView({ ...EMPTY, isRunning: true });
+      try {
+        const handle = await startRun(config);
+        follow(handle.run_id);
+        return handle;
+      } catch (error) {
+        setView(EMPTY);
+        throw error;
+      }
     },
     [follow],
   );
 
   const launchSweep = useCallback(
     async (request: SweepRequest) => {
-      const handle = await startSweep(request);
-      follow(handle.run_id);
-      return handle;
+      setView({ ...EMPTY, isRunning: true });
+      try {
+        const handle = await startSweep(request);
+        follow(handle.run_id);
+        return handle;
+      } catch (error) {
+        setView(EMPTY);
+        throw error;
+      }
     },
     [follow],
   );

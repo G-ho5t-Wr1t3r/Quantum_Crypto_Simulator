@@ -31,17 +31,20 @@ function ProtocolCard({
   name,
   sub,
   active,
+  disabled,
   onClick,
 }: {
   name: string;
   sub: string;
   active: boolean;
+  disabled: boolean;
   onClick: () => void;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
       style={{
         display: "flex",
         flexDirection: "column",
@@ -52,7 +55,8 @@ function ProtocolCard({
         border: `1px solid ${active ? "var(--line-2)" : "var(--line)"}`,
         background: active ? "var(--panel-2)" : "var(--panel)",
         color: "var(--fg)",
-        cursor: "pointer",
+        cursor: disabled ? "default" : "pointer",
+        opacity: disabled && !active ? 0.5 : 1,
         textAlign: "left",
         boxShadow: active ? "0 6px 18px -14px #000, inset 0 1px 0 var(--hi)" : "none",
         transition: "background .16s ease",
@@ -67,6 +71,7 @@ function ProtocolCard({
 export function Sidebar({
   params,
   set,
+  onProtocol,
   plugins,
   busy,
   onRun,
@@ -79,6 +84,8 @@ export function Sidebar({
 }: {
   params: Params;
   set: <K extends keyof Params>(key: K, value: Params[K]) => void;
+  /** Separate from `set`: changing protocol also clears the last result. */
+  onProtocol: (protocol: ProtocolKind) => void;
   plugins: Plugins | undefined;
   busy: boolean;
   onRun: () => void;
@@ -151,13 +158,15 @@ export function Sidebar({
               name="BB84"
               sub={t.bb84sub}
               active={isBB84}
-              onClick={() => set("protocol", "bb84" as ProtocolKind)}
+              disabled={busy}
+              onClick={() => onProtocol("bb84")}
             />
             <ProtocolCard
               name="E91"
               sub={t.e91sub}
               active={!isBB84}
-              onClick={() => set("protocol", "e91" as ProtocolKind)}
+              disabled={busy}
+              onClick={() => onProtocol("e91")}
             />
           </div>
         </section>
@@ -172,6 +181,7 @@ export function Sidebar({
             ]}
             value={params.channelKind}
             onChange={(value) => set("channelKind", value)}
+          disabled={busy}
           />
           {params.channelKind !== "ideal" && (
             // One control, both readings. γ drives because its range is bounded
@@ -186,6 +196,7 @@ export function Sidebar({
               step={0.005}
               value={params.gamma}
               onChange={(value) => set("gamma", value)}
+            disabled={busy}
             />
           )}
         </section>
@@ -200,6 +211,7 @@ export function Sidebar({
             ]}
             value={params.attackKind}
             onChange={(value) => set("attackKind", value)}
+          disabled={busy}
           />
           {attacking && (
             <>
@@ -218,6 +230,7 @@ export function Sidebar({
                     ].filter((option) => validPositions.includes(option.id))}
                     value={params.position}
                     onChange={(value) => set("position", value)}
+                  disabled={busy}
                   />
                 </div>
               )}
@@ -230,6 +243,7 @@ export function Sidebar({
                 step={0.01}
                 value={params.fraction}
                 onChange={(value) => set("fraction", value)}
+              disabled={busy}
               />
             </>
           )}
@@ -246,6 +260,7 @@ export function Sidebar({
             step={100}
             value={params.nQubits}
             onChange={(value) => set("nQubits", value)}
+          disabled={busy}
           />
           <Slider
             label={t.trials}
@@ -256,6 +271,7 @@ export function Sidebar({
             step={1}
             value={params.trials}
             onChange={(value) => set("trials", value)}
+          disabled={busy}
           />
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
@@ -266,6 +282,7 @@ export function Sidebar({
               <input
                 value={params.seed}
                 aria-label={t.seed}
+                disabled={busy}
                 onChange={(event) =>
                   set("seed", parseInt(event.target.value.replace(/\D/g, "") || "0", 10))
                 }
@@ -285,6 +302,7 @@ export function Sidebar({
               <button
                 type="button"
                 title={t.randomize}
+                disabled={busy}
                 onClick={() => set("seed", Math.floor(Math.random() * 9e7) + 1e7)}
                 style={{
                   flex: "none",
@@ -312,13 +330,17 @@ export function Sidebar({
           {isBB84 ? (
             <Slider
               label={t.threshold}
-              display={params.qberThreshold.toFixed(3)}
+              // Shown as a percentage because every other error rate on the
+              // screen is one, and comparing 0.110 with "10.34 %" by eye is a
+              // conversion the reader should not have to do.
+              display={`${(params.qberThreshold * 100).toFixed(1)} %`}
               hint={t.thresholdHint}
               min={range("SecurityPolicy.qber_threshold", 0.02, 0.3).min}
               max={range("SecurityPolicy.qber_threshold", 0.02, 0.3).max}
               step={0.005}
               value={params.qberThreshold}
               onChange={(value) => set("qberThreshold", value)}
+            disabled={busy}
             />
           ) : (
             <Slider
@@ -330,6 +352,7 @@ export function Sidebar({
               step={1}
               value={params.chshConfidence}
               onChange={(value) => set("chshConfidence", value)}
+            disabled={busy}
             />
           )}
           <button
@@ -379,6 +402,7 @@ export function Sidebar({
               may simply refuse. */}
           <button
             type="button"
+            disabled={busy}
             onClick={() => {
               setPasting((open) => !open);
               setBadPaste(false);

@@ -28,6 +28,12 @@
   --fg: #f2f2f4; --fg-2: #a3a3aa; --fg-3: #6b6b73;
   --blue: #4c8dff; --mint: #4cc47d; --red: #e5544b; --orange: #dc9236; --purple: #9a7ae0; --grey: #85858d;
   --amber: #e8c15a;
+  /* The map's two fills, tuned per theme rather than mixed the same way in
+     both: the same share of red that reads as a refusal on a dark ground comes
+     out pink on a light one, because it is being diluted by a pale background
+     instead of a near-black one. */
+  --cell-reject: color-mix(in oklab, #e5544b 36%, transparent);
+  --cell-accept: color-mix(in oklab, #4cc47d 70%, transparent);
   --track: rgba(255,255,255,.16); --thumb: #f2f2f4;
   --sky: #0b0b0e; --floor: #101014; --horizon: rgba(120,160,255,.10); --plot: #0b0b0e;
   --grid: rgba(255,255,255,.5); --shadow: rgba(0,0,0,.62); --hi: rgba(255,255,255,.09);
@@ -40,6 +46,8 @@
   --fg: #17171a; --fg-2: #4f4f57; --fg-3: #7c7c85;
   --blue: #1667d4; --mint: #2c8a52; --red: #c4382f; --orange: #9b6410; --purple: #6f4fbf; --grey: #74747c;
   --amber: #9a7413;
+  --cell-reject: color-mix(in oklab, #b3251b 78%, transparent);
+  --cell-accept: color-mix(in oklab, #2c8a52 78%, transparent);
   --track: rgba(0,0,0,.16); --thumb: #ffffff;
   --sky: #cfcfd5; --floor: #e3e3e7; --horizon: rgba(60,90,160,.12); --plot: #d2d2d8;
   --grid: rgba(0,0,0,.42); --shadow: rgba(0,0,0,.28); --hi: rgba(255,255,255,.75);

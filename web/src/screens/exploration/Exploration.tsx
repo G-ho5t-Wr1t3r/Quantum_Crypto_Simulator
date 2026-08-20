@@ -13,12 +13,12 @@
  */
 
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
 
 import { ApiError } from "../../api/client";
 import type { ProtocolKind, SweepAxis, SweepPoint } from "../../api/contract";
 import { useRun } from "../../api/useRun";
 import { LangSwitch, ThemeSwitch } from "../../components/AppearanceControls";
+import { ScreenTabs } from "../../components/ScreenTabs";
 import { Kicker, RunButton, Segmented, Slider } from "../../components/controls";
 import { Banner } from "../../components/Banner";
 import { Modal } from "../../components/Modal";
@@ -417,25 +417,6 @@ export default function Exploration() {
           backdropFilter: "blur(14px)",
         }}
       >
-        <Link
-          to="/run"
-          style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: 7,
-            padding: "7px 13px",
-            borderRadius: 10,
-            border: "1px solid var(--line)",
-            background: "var(--panel-2)",
-            color: "var(--fg)",
-            fontSize: 12.5,
-            fontWeight: 500,
-            whiteSpace: "nowrap",
-            boxShadow: "inset 0 1px 0 var(--hi)",
-          }}
-        >
-          ← {t.back}
-        </Link>
         <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
           <span style={{ fontSize: 15, fontWeight: 600, letterSpacing: "-.02em", whiteSpace: "nowrap" }}>
             {t.explorationTitle}
@@ -445,23 +426,7 @@ export default function Exploration() {
           </span>
         </div>
         <div style={{ flex: 1 }} />
-        <Link
-          to="/compare"
-          style={{
-            display: "inline-flex",
-            padding: "7px 13px",
-            borderRadius: 10,
-            border: "1px solid var(--line)",
-            background: "var(--panel-2)",
-            color: "var(--fg)",
-            fontSize: 12,
-            fontWeight: 500,
-            whiteSpace: "nowrap",
-            boxShadow: "inset 0 1px 0 var(--hi)",
-          }}
-        >
-          {t.compareCta} →
-        </Link>
+        <ScreenTabs />
         <LangSwitch />
         <ThemeSwitch />
       </header>
@@ -501,6 +466,7 @@ export default function Exploration() {
                 setProtocol(value);
                 run.reset();
               }}
+            disabled={run.isRunning}
             />
           </div>
 
@@ -513,6 +479,7 @@ export default function Exploration() {
                   <button
                     key={option.id}
                     type="button"
+                    disabled={run.isRunning}
                     onClick={() => changeAxis(option.id)}
                     style={{
                       display: "flex",
@@ -524,7 +491,8 @@ export default function Exploration() {
                       borderRadius: 11,
                       background: active ? "var(--panel-3)" : "var(--panel)",
                       color: "var(--fg)",
-                      cursor: "pointer",
+                      cursor: run.isRunning ? "default" : "pointer",
+                      opacity: run.isRunning && !active ? 0.5 : 1,
                       textAlign: "left",
                       boxShadow: active ? "inset 0 1px 0 var(--hi)" : "none",
                     }}
@@ -550,7 +518,6 @@ export default function Exploration() {
                 );
               })}
             </div>
-            <span style={{ fontSize: 11.5, lineHeight: 1.5, color: "var(--fg-3)" }}>{t.axisHint}</span>
           </div>
 
           <div
@@ -570,6 +537,7 @@ export default function Exploration() {
               step={range.step}
               value={lo}
               onChange={(value) => setLo(Math.min(value, hi - range.step))}
+            disabled={run.isRunning}
             />
             <Slider
               label={t.rangeMax}
@@ -579,6 +547,7 @@ export default function Exploration() {
               step={range.step}
               value={hi}
               onChange={(value) => setHi(Math.max(value, lo + range.step))}
+            disabled={run.isRunning}
             />
             <Slider
               label={t.points}
@@ -590,6 +559,7 @@ export default function Exploration() {
               step={1}
               value={points}
               onChange={setPoints}
+            disabled={run.isRunning}
             />
           </div>
 
@@ -692,7 +662,7 @@ export default function Exploration() {
                   key={button.label}
                   type="button"
                   onClick={button.action}
-                  disabled={!done}
+                  disabled={!done || run.isRunning}
                   className="mono"
                   style={{
                     flex: 1,
@@ -842,7 +812,7 @@ export default function Exploration() {
                 <button
                   type="button"
                   onClick={() => setExpanded(true)}
-                  disabled={!done}
+                  disabled={!done || run.isRunning}
                   className="mono"
                   style={{
                     padding: "5px 11px",
