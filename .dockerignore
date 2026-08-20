@@ -1,0 +1,24 @@
+# Everything the running service does not need. Kept tight because the build
+# context is uploaded to the daemon in full before the first instruction runs.
+
+.git
+.gitignore
+.env
+web/
+tests/
+conftest.py
+notebooks/
+figures/
+report/
+docs/
+dist/
+*.md
+!README.md
+
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+.vscode/
+.idea/

@@ -1,0 +1,14 @@
+{
+  "limits": {
+    "max_concurrent_runs": 5,
+    "run_history": 20,
+    "max_sync_qubits": 200
+  },
+  "contact": {
+    "repository": "https://github.com/G-ho5t-Wr1t3r/Quantum_Crypto_Simulator",
+    "api_docs": "",
+    "email": "contatti.giovannimurfuni@gmail.com",
+    "github": "https://github.com/G-ho5t-Wr1t3r",
+    "linkedin": "https://www.linkedin.com/in/giovanni-lorenzo-murfuni-38655a309/"
+  }
+}

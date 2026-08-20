@@ -40,19 +40,18 @@ from __future__ import annotations
 import asyncio
 import csv
 import io
-import os
 import uuid
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from qkd import appconfig
 from qkd.attacks import AttackNotAllowedError
 from qkd.engine import (
     EventKind,
@@ -67,20 +66,23 @@ from qkd.registry import UnknownPluginError, describe
 from qkd.settings import SimulationConfig, json_schema
 
 
-# Operational limits, read from .env with the defaults documented in
-# .env.example. They are limits, not secrets: the example file is checked in so
-# that the values are visible without reading this source.
-load_dotenv()
+def limits() -> appconfig.Limits:
+    """The limits in force right now.
 
-MAX_CONCURRENT_RUNS = int(os.getenv("QKD_MAX_CONCURRENT_RUNS", "5"))
-RUN_HISTORY = int(os.getenv("QKD_RUN_HISTORY", "20"))
-MAX_SYNC_QUBITS = int(os.getenv("QKD_MAX_SYNC_QUBITS", "200"))
+    Read per call rather than captured at import, so a change made through the
+    settings endpoint applies to the next request instead of the next restart.
+    """
+    return appconfig.load().limits
 
 
 class RunStatus(str, Enum):
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"
+    #: Stopped on request. Distinct from FAILED because nothing went wrong, and
+    #: distinct from COMPLETED because the result is partial — a sweep that was
+    #: cancelled has the points it reached and no more.
+    CANCELLED = "cancelled"
 
 
 @dataclass
@@ -97,6 +99,8 @@ class RunState:
     events: list[dict] = field(default_factory=list)
     result: dict | None = None
     error: str | None = None
+    #: Set by the cancel endpoint; read by the worker between events.
+    cancelled: bool = False
     updated: asyncio.Event = field(default_factory=asyncio.Event)
 
     def append(self, event: SimulationEvent) -> None:
@@ -142,7 +146,7 @@ def _register(state: RunState) -> None:
     """
     _RUNS[state.run_id] = state
     for run_id in list(_RUNS):
-        if len(_RUNS) <= RUN_HISTORY:
+        if len(_RUNS) <= limits().run_history:
             break
         if run_id != state.run_id and _RUNS[run_id].status is not RunStatus.RUNNING:
             del _RUNS[run_id]
@@ -159,11 +163,12 @@ def _refuse_if_busy() -> None:
         HTTPException: 429 when the ceiling is reached.
     """
     active = sum(1 for s in _RUNS.values() if s.status is RunStatus.RUNNING)
-    if active >= MAX_CONCURRENT_RUNS:
+    ceiling = limits().max_concurrent_runs
+    if active >= ceiling:
         raise HTTPException(
             status_code=429,
             detail=f"{active} runs already in flight; the limit is "
-            f"{MAX_CONCURRENT_RUNS} (QKD_MAX_CONCURRENT_RUNS)",
+            f"{ceiling} (limits.max_concurrent_runs)",
         )
 
 
@@ -214,6 +219,38 @@ def plugins() -> dict:
     return describe()
 
 
+@app.get("/config", tags=["settings"])
+def read_config() -> dict:
+    """The service's own settings: its limits, and what the footer prints.
+
+    Served rather than compiled into the interface so that the two cannot
+    disagree — the numbers shown in the settings panel are the ones being
+    enforced, read from the same file at the same moment.
+    """
+    return appconfig.load().model_dump()
+
+
+@app.put("/config", tags=["settings"])
+def write_config(config: appconfig.AppConfig) -> dict:
+    """Replace the settings, in force from the next request.
+
+    NO AUTHENTICATION, deliberately and worth stating: this service has none
+    anywhere, and this endpoint is the one where that matters most — anyone who
+    can reach it can raise the concurrency ceiling this machine is protected by.
+    That is acceptable for a simulator on a laptop or a private network, and it
+    is not acceptable on an open one. The bounds on `Limits` are what keeps a
+    mistake from being unbounded; they are not a security control.
+    """
+    appconfig.save(config)
+    return config.model_dump()
+
+
+@app.get("/config/schema", tags=["settings"])
+def config_schema() -> dict:
+    """The shape of the settings, so a form is built from it and cannot drift."""
+    return appconfig.json_schema()
+
+
 @app.get("/schema", tags=["discovery"])
 def schema() -> dict:
     """The JSON Schema of a configuration.
@@ -241,6 +278,16 @@ def _launch(state: RunState, produce) -> None:
     def work() -> None:
         try:
             for event in produce():
+                # Checked between events, which is as fine-grained as the engine
+                # allows: one trial and one sweep point are each a single
+                # indivisible computation. So a sweep stops at its next point —
+                # useful, since a long one is mostly points — while a single
+                # trial runs to its end whatever happens here. Pretending
+                # otherwise would need the protocols rewritten as interruptible
+                # generators, for a gain nobody asked for.
+                if state.cancelled:
+                    loop.call_soon_threadsafe(state.finish, RunStatus.CANCELLED, None)
+                    return
                 loop.call_soon_threadsafe(state.append, event)
             loop.call_soon_threadsafe(state.finish, RunStatus.COMPLETED, None)
         except Exception as exc:  # surfaced to the client, not swallowed
@@ -335,7 +382,7 @@ async def simulate_sync(config: SimulationConfig) -> dict:
     still open. It saves the interface the identifier-then-poll dance for runs
     that would have completed before the first poll anyway.
 
-    Refused above `QKD_MAX_SYNC_QUBITS`, because a configuration large enough to
+    Refused above `limits.max_sync_qubits`, because a configuration large enough to
     take minutes would hold the connection open and time out somewhere in the
     middle — with no identifier to recover the run afterwards. The asynchronous
     endpoint exists for those.
@@ -347,11 +394,12 @@ async def simulate_sync(config: SimulationConfig) -> dict:
         HTTPException: 413 if the configuration is too large for this endpoint,
             422 if the attacker cannot act from where it was placed.
     """
-    if config.n_qubits > MAX_SYNC_QUBITS:
+    ceiling = limits().max_sync_qubits
+    if config.n_qubits > ceiling:
         raise HTTPException(
             status_code=413,
             detail=f"{config.n_qubits} qubits is too many to run synchronously; "
-            f"the limit is {MAX_SYNC_QUBITS} (QKD_MAX_SYNC_QUBITS). "
+            f"the limit is {ceiling} (limits.max_sync_qubits). "
             f"Use POST /simulate instead.",
         )
 
@@ -371,6 +419,22 @@ def _get(run_id: str) -> RunState:
     if state is None:
         raise HTTPException(status_code=404, detail=f"no run {run_id}")
     return state
+
+
+@app.post("/runs/{run_id}/cancel", status_code=202, tags=["runs"])
+def cancel(run_id: str) -> dict:
+    """Ask a run to stop at its next event.
+
+    202 rather than 200: the request has been accepted, and the run ends when it
+    reaches a point where stopping is possible. Cancelling something already
+    finished is not an error — it is the outcome the caller wanted — so it is
+    reported rather than refused.
+    """
+    state = _get(run_id)
+    if state.status is RunStatus.RUNNING:
+        state.cancelled = True
+        state._wake()
+    return {"run_id": run_id, "status": state.status.value, "cancelled": state.cancelled}
 
 
 @app.get("/runs/{run_id}", tags=["runs"])

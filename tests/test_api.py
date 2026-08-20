@@ -200,7 +200,7 @@ class TestSweep:
         the asymmetry that identifies the channel.
         """
         request = {
-            "config": {**SMALL, "n_qubits": 200},
+            "config": {**SMALL, "n_qubits": 600},
             "axis": "gamma",
             "start": 0.0,
             "stop": 0.8,
@@ -214,7 +214,7 @@ class TestSweep:
 
     def test_the_interception_curve_carries_what_eve_learns(self):
         request = {
-            "config": {**SMALL, "n_qubits": 200},
+            "config": {**SMALL, "n_qubits": 600},
             "axis": "attack_fraction",
             "start": 0.0,
             "stop": 1.0,
@@ -351,27 +351,27 @@ class TestSyncRun:
 class TestOperationalLimits:
     def test_the_history_drops_the_oldest_finished_runs(self):
         """Bounded on purpose: a run keeps views proportional to its qubit count."""
-        from qkd.api import _RUNS, RUN_HISTORY, RunState, RunStatus, _register
+        from qkd.api import _RUNS, RunState, RunStatus, _register, limits
 
         _RUNS.clear()
-        for index in range(RUN_HISTORY + 5):
+        for index in range(limits().run_history + 5):
             state = RunState(run_id=f"old-{index}")
             state.status = RunStatus.COMPLETED
             _register(state)
 
-        assert len(_RUNS) == RUN_HISTORY
+        assert len(_RUNS) == limits().run_history
         assert "old-0" not in _RUNS
-        assert f"old-{RUN_HISTORY + 4}" in _RUNS
+        assert f"old-{limits().run_history + 4}" in _RUNS
         _RUNS.clear()
 
     def test_a_running_run_is_never_evicted(self):
         """Evicting one would strand a worker thread writing into nothing."""
-        from qkd.api import _RUNS, RUN_HISTORY, RunState, RunStatus, _register
+        from qkd.api import _RUNS, RunState, RunStatus, _register, limits
 
         _RUNS.clear()
         alive = RunState(run_id="alive")
         _register(alive)
-        for index in range(RUN_HISTORY + 5):
+        for index in range(limits().run_history + 5):
             done = RunState(run_id=f"done-{index}")
             done.status = RunStatus.COMPLETED
             _register(done)
@@ -381,13 +381,103 @@ class TestOperationalLimits:
 
     def test_too_many_concurrent_runs_are_refused(self):
         """429 rather than a silent queue: the caller learns it did not start."""
-        from qkd.api import _RUNS, MAX_CONCURRENT_RUNS, RunState, _register
+        from qkd.api import _RUNS, RunState, _register, limits
 
         _RUNS.clear()
-        for index in range(MAX_CONCURRENT_RUNS):
+        for index in range(limits().max_concurrent_runs):
             _register(RunState(run_id=f"busy-{index}"))  # default status: running
 
         response = client.post("/simulate", json={"n_qubits": 20, "seed": 1})
         assert response.status_code == 429
-        assert "QKD_MAX_CONCURRENT_RUNS" in response.json()["detail"]
+        assert "limits.max_concurrent_runs" in response.json()["detail"]
         _RUNS.clear()
+
+
+class TestSettings:
+    """The service's own configuration, readable and writable at run time."""
+
+    def test_the_settings_are_served(self):
+        body = client.get("/config").json()
+        assert body["limits"]["max_concurrent_runs"] >= 1
+        assert "repository" in body["contact"]
+
+    def test_the_form_is_built_from_the_schema(self):
+        """So the panel cannot offer a value the service would refuse."""
+        schema = client.get("/config/schema").json()
+        assert "Limits" in schema["$defs"]
+        assert schema["$defs"]["Limits"]["properties"]["max_concurrent_runs"]["minimum"] == 1
+
+    def test_a_change_applies_to_the_next_request(self, tmp_path, monkeypatch):
+        """Read per call, not captured at import: that is the whole point of
+        moving these out of the environment."""
+        from qkd import appconfig
+
+        monkeypatch.setattr(appconfig, "CONFIG_PATH", tmp_path / "config.json")
+        client.put("/config", json={"limits": {"max_sync_qubits": 12}, "contact": {}})
+
+        response = client.post("/simulate/sync", json={"n_qubits": 40, "seed": 1})
+        assert response.status_code == 413
+        assert "12" in response.json()["detail"]
+
+    def test_an_impossible_limit_is_refused(self):
+        """Bounds keep a mistake from being unbounded. They are not a security
+        control: this endpoint has no authentication, like the rest of the
+        service."""
+        assert client.put("/config", json={"limits": {"max_concurrent_runs": 0}}).status_code == 422
+        assert client.put("/config", json={"limits": {"run_history": 10_000}}).status_code == 422
+
+
+class TestCancelling:
+    """Stopping a run that is under way.
+
+    The worker is exercised directly rather than through the HTTP client. Under
+    `TestClient` a CPU-bound executor task starves the portal's event loop, so a
+    real simulation finishes inside the POST that launched it and there is never
+    anything left to cancel — an artefact of the test transport, not of the
+    service: against a live server the same request answers in under a tenth of
+    a second with the run still going.
+    """
+
+    def test_the_worker_stops_between_events(self):
+        import asyncio
+        import itertools
+        import time
+
+        from qkd.api import RunState, RunStatus, _launch
+        from qkd.engine import EventKind, SimulationEvent
+
+        state = RunState(run_id="cancel-me")
+
+        def produce():
+            for index in itertools.count():
+                time.sleep(0.01)
+                yield SimulationEvent(kind=EventKind.TRIAL, index=index, payload={})
+
+        async def drive():
+            _launch(state, produce)
+            await asyncio.sleep(0.08)
+            assert state.events, "it should have produced something first"
+            state.cancelled = True
+            for _ in range(300):
+                if state.status is not RunStatus.RUNNING:
+                    return
+                await asyncio.sleep(0.01)
+
+        asyncio.run(drive())
+
+        # Nothing went wrong, so not FAILED; the result is partial, so not
+        # COMPLETED. And what it reached is kept: those events are real runs.
+        assert state.status is RunStatus.CANCELLED
+        assert state.error is None
+        assert state.events
+
+    def test_cancelling_a_finished_run_is_not_an_error(self):
+        """It is the outcome the caller wanted, so it is reported not refused."""
+        run_id = client.post("/simulate", json=SMALL).json()["run_id"]
+        _wait(run_id)
+        response = client.post(f"/runs/{run_id}/cancel")
+        assert response.status_code == 202
+        assert response.json()["status"] == "completed"
+
+    def test_cancelling_an_unknown_run_is_a_404(self):
+        assert client.post("/runs/nope/cancel").status_code == 404

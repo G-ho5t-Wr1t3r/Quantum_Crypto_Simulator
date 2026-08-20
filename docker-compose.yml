@@ -3,11 +3,10 @@ services:
     build: .
     expose:
       - "8000"
-    environment:
-      # Read from .env 
-      QKD_MAX_CONCURRENT_RUNS: ${QKD_MAX_CONCURRENT_RUNS:-5}
-      QKD_RUN_HISTORY: ${QKD_RUN_HISTORY:-20}
-      QKD_MAX_SYNC_QUBITS: ${QKD_MAX_SYNC_QUBITS:-200}
+    volumes:
+      # Mounted rather than baked in: the settings panel writes to this file,
+      # and a change made through it has to outlive the container.
+      - ./config.json:/app/config.json
     healthcheck:
       # Tests if the socket is open using the local interpeter instead of image
       test:

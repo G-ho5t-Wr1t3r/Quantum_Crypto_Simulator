@@ -23,7 +23,6 @@ matplotlib
 fastapi
 uvicorn[standard]   # 'standard' pulls in the websockets support needed for live streaming
 pydantic
-python-dotenv       # api.py reads its operational limits from the environment
 
 # Notebooks
 jupyterlab
