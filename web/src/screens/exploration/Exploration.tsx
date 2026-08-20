@@ -25,8 +25,9 @@ import { Modal } from "../../components/Modal";
 import { ChartSkeleton, ReadoutsSkeleton } from "../../components/Skeleton";
 import { LineChart } from "../../components/LineChart";
 import { usePlugins } from "../../api/queries";
+import { useAppearance } from "../../app/appearance";
 import { useCopy, useLocale } from "../../i18n/useCopy";
-import { download, downloadPng, downloadSvg } from "../../lib/download";
+import { download, downloadPng, downloadSvg, type ExportTheme } from "../../lib/download";
 import { CLASSICAL_BOUND, gammaFromLength, lengthFromGamma, MIN_E91_PAIRS, TSIRELSON } from "../../lib/physics";
 
 /** Sensible ranges per axis: wide enough to contain the crossing, no wider. */
@@ -195,6 +196,7 @@ function SweepTable({
 export default function Exploration() {
   const t = useCopy();
   const locale = useLocale();
+  const { lang } = useAppearance();
   const run = useRun();
   // Only to know whether the engine is there. The answer is cached, so asking
   // on every tool screen costs one request for the whole session.
@@ -207,6 +209,15 @@ export default function Exploration() {
   const [points, setPoints] = useState(21);
   const [failure, setFailure] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
+  /**
+   * Light by default, whatever the interface is wearing.
+   *
+   * A figure's destination is a document on white paper, and the theme of the
+   * screen it was produced on is not a property of the figure. Exporting a dark
+   * chart into the report is the mistake this default exists to prevent — and
+   * it stays a switch rather than a rule, because slides are the other case.
+   */
+  const [exportTheme, setExportTheme] = useState<ExportTheme>("light");
 
   const plotHost = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -375,6 +386,18 @@ export default function Exploration() {
   }, [curve, isBB84, key]);
 
   const done = curve.length;
+
+  /**
+   * What produced this figure, printed on it.
+   *
+   * An exported chart arrives in a document with no idea where it came from,
+   * and a curve without its parameters is not evidence of anything. Seed
+   * included, because that is what makes it reproducible.
+   */
+  const stamp =
+    `${isBB84 ? "BB84" : "E91"} · ${axis} · ${done || points} ${lang === "it" ? "punti" : "points"}` +
+    ` · n=${QUBITS.toLocaleString(locale)} · seed ${SEED}` +
+    (isBB84 ? ` · ${lang === "it" ? "soglia" : "threshold"} ${(THRESHOLD * 100).toFixed(0)} %` : " · k=3");
   const progress = points === 0 ? 0 : Math.min(1, done / points);
 
   return (
@@ -639,19 +662,30 @@ export default function Exploration() {
             }}
           >
             <Kicker>{t.exportLabel}</Kicker>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <span style={{ fontSize: 12, color: "var(--fg-2)" }}>{t.exportTheme}</span>
+              <Segmented<ExportTheme>
+                wide
+                label={t.exportTheme}
+                options={[
+                  { id: "light", label: t.light },
+                  { id: "dark", label: t.dark },
+                ]}
+                value={exportTheme}
+                onChange={setExportTheme}
+              />
+              <span style={{ fontSize: 11, color: "var(--fg-3)", lineHeight: 1.45 }}>{t.exportThemeHint}</span>
+            </div>
             <div style={{ display: "flex", gap: 6 }}>
               {[
                 {
                   label: "PNG",
-                  action: () =>
-                    svgRef.current &&
-                    downloadPng(
-                      svgRef.current,
-                      `sweep_${key}.png`,
-                      getComputedStyle(document.documentElement).getPropertyValue("--plot").trim() || "#ffffff",
-                    ),
+                  action: () => svgRef.current && downloadPng(svgRef.current, `sweep_${key}.png`, exportTheme),
                 },
-                { label: "SVG", action: () => svgRef.current && downloadSvg(svgRef.current, `sweep_${key}.svg`) },
+                {
+                  label: "SVG",
+                  action: () => svgRef.current && downloadSvg(svgRef.current, `sweep_${key}.svg`, exportTheme),
+                },
                 { label: "CSV", action: exportCsv },
               ].map((button) => (
                 <button
@@ -682,39 +716,10 @@ export default function Exploration() {
         <main style={{ padding: 22, display: "flex", flexDirection: "column", gap: 18, minWidth: 0 }}>
           {backend.isError && <Banner tone="error">{t.backendDown}</Banner>}
 
-          <section
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: 14,
-              padding: "20px 22px 18px",
-              border: "1px solid var(--line)",
-              borderRadius: 18,
-              background: "var(--panel)",
-              boxShadow: "0 26px 60px -46px #000, inset 0 1px 0 var(--hi)",
-            }}
-          >
+          <section style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
               <div style={{ display: "flex", flexDirection: "column", gap: 5, minWidth: 0 }}>
                 <Kicker>{t.figureKicker}</Kicker>
-                <span style={{ fontSize: 17, fontWeight: 600, letterSpacing: "-.02em" }}>{t.titles[key]}</span>
-              </div>
-              <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "center" }}>
-                {[
-                  ...series.map((entry) => ({ label: entry.label, color: entry.color, dashed: false })),
-                  { label: isBB84 ? t.legendThrQber : t.legendThrS, color: "var(--red)", dashed: true },
-                ].map((entry) => (
-                  <div key={entry.label} style={{ display: "flex", alignItems: "center", gap: 7 }}>
-                    <span
-                      style={
-                        entry.dashed
-                          ? { width: 14, height: 0, borderTop: `2px dashed ${entry.color}`, flex: "none" }
-                          : { width: 14, height: 3, borderRadius: 2, background: entry.color, flex: "none" }
-                      }
-                    />
-                    <span style={{ fontSize: 11.5, color: "var(--fg-2)", whiteSpace: "nowrap" }}>{entry.label}</span>
-                  </div>
-                ))}
               </div>
             </div>
 
@@ -743,6 +748,8 @@ export default function Exploration() {
                 xTitle={xTitle}
                 yTitle={isBB84 ? t.yQber : t.yS}
                 runLabel={t.runColumn}
+                title={t.titles[key] ?? ""}
+                subtitle={stamp}
                 width={plotWidth}
                 acceptFill={isBB84 ? "var(--mint)" : "var(--blue)"}
               />
@@ -754,7 +761,14 @@ export default function Exploration() {
             </span>
           </section>
 
-          <section style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 14 }}>
+          <section
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+              gap: 26,
+              padding: "4px 2px",
+            }}
+          >
             {done === 0 && <ReadoutsSkeleton active={run.isRunning} />}
             {done > 0 && [
               {
@@ -786,19 +800,7 @@ export default function Exploration() {
                     sub: t.asymmetrySub,
                   },
             ].map((readout) => (
-              <div
-                key={readout.label}
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 6,
-                  padding: "16px 18px",
-                  border: "1px solid var(--line)",
-                  borderRadius: 14,
-                  background: "var(--panel)",
-                  boxShadow: "inset 0 1px 0 var(--hi)",
-                }}
-              >
+              <div key={readout.label} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                 <span
                   className="mono"
                   style={{ fontSize: 10, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--fg-3)" }}

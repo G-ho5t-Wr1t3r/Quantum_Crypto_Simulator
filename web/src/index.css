@@ -56,6 +56,11 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Everything clickable settles rather than snaps. Cheap, uniform, and it is
+   what stops a link from feeling like a page load. */
+a, button {
+  transition: background-color .18s ease, border-color .18s ease, color .18s ease;
+}
 a { color: var(--fg-2); text-decoration: none; }
 a:hover { color: var(--fg); }
 button { font-family: inherit; }

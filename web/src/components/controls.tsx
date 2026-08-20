@@ -38,17 +38,28 @@ export function Segmented<T extends string | null>({
   value,
   onChange,
   wide = false,
+  label,
   style,
 }: {
   options: Option<T>[];
   value: T;
   onChange: (value: T) => void;
   wide?: boolean;
+  /**
+   * What this group of choices is for.
+   *
+   * Worth setting wherever two groups on the same screen share option names —
+   * the interface theme and the figure's palette are both Light/Dark, and
+   * without a group name neither the reader using a screen reader nor a test
+   * can tell which one is which.
+   */
+  label?: string;
   style?: CSSProperties;
 }) {
   return (
     <div
       role="radiogroup"
+      aria-label={label}
       style={{
         display: "flex",
         gap: 3,

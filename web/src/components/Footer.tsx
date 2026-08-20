@@ -109,7 +109,6 @@ export function Footer() {
               { label: t.linkConfig, to: "/run" },
               { label: t.linkExplore, to: "/explore" },
               { label: t.linkCompare, to: "/compare" },
-              { label: t.linkHome, to: "/" },
             ]}
           />
           <Column

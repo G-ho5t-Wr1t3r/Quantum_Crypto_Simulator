@@ -11,7 +11,7 @@
  * the nulls, which is the part most likely to break.
  */
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -468,6 +468,80 @@ describe("Exploration", () => {
     expect(screen.getByText(/20\.0 km · γ/)).toBeDefined();
     // And the count says how far apart the points fall, which is what it sets.
     expect(screen.getByText(/Passo 1\.00 km/)).toBeDefined();
+  });
+});
+
+describe("The exported figure", () => {
+  it("defaults to light, whatever the interface is wearing", () => {
+    mount(<Exploration />, "/explore");
+    // A figure ends up in a document on white paper; the theme of the screen it
+    // was made on is not a property of the figure.
+    // Scoped to its own group: the interface theme offers the same two words.
+    const group = within(screen.getByRole("radiogroup", { name: "Colore della figura" }));
+    expect(group.getByRole("radio", { name: "Light" }).getAttribute("aria-checked")).toBe("true");
+    expect(group.getByRole("radio", { name: "Dark" }).getAttribute("aria-checked")).toBe("false");
+  });
+
+  it("resolves the colours against the chosen palette, not the visible one", () => {
+    mount(<Exploration />, "/explore");
+    const root = document.documentElement;
+    root.setAttribute("data-qkd", "dark");
+
+    fireEvent.click(screen.getByText("SVG"));
+
+    // The root attribute is flipped to read the other palette and put back, so
+    // the page it was exported from is left exactly as it was found.
+    expect(root.getAttribute("data-qkd")).toBe("dark");
+  });
+
+  it("carries everything needed to read it inside the SVG", async () => {
+    class SweepSocket {
+      onmessage: ((event: { data: string }) => void) | null = null;
+      onerror: (() => void) | null = null;
+      onclose: (() => void) | null = null;
+      constructor() {
+        setTimeout(() => {
+          const send = (payload: unknown) => this.onmessage?.({ data: JSON.stringify(payload) });
+          const point = (index: number) => ({
+            value: index * 10,
+            qber: 0.02 * (index + 1),
+            qber_stdev: 0.001,
+            chsh: null,
+            chsh_stdev: null,
+            accepted: true,
+            qber_by_basis: { rectilinear: 0.03, diagonal: 0.01 },
+            eavesdropper_knowledge: null,
+          });
+          send({ kind: "started", index: null, payload: { axis: "length_km", points: 2 } });
+          [0, 1].forEach((index) => send({ kind: "sweep_point", index, payload: point(index) }));
+          send({ kind: "done", index: null, payload: { axis: "length_km", points: [point(0), point(1)] } });
+          this.onclose?.();
+        }, 0);
+      }
+      close() {}
+    }
+    vi.stubGlobal("WebSocket", SweepSocket);
+
+    const { container } = mount(<Exploration />, "/explore");
+    fireEvent.click(screen.getByText("Esegui lo sweep"));
+    await waitFor(() => expect((screen.getByText(/Espandi/) as HTMLButtonElement).disabled).toBe(false));
+
+    // An export serialises the SVG element and nothing else. Labels laid over
+    // it as HTML looked right on screen and came out as bare coloured lines.
+    const svg = container.querySelector("svg")!;
+    const text = svg.textContent ?? "";
+    for (const needed of [
+      "QBER(L)",                 // the title
+      "seed 20260818",           // what produced it
+      "base Z (↕)",              // the legend
+      "soglia QBER",             // the decision rule
+      "QBER stimato (%)",        // the y axis
+      "lunghezza della fibra",   // the x axis
+      "km",                      // tick labels, in both readings
+      "γ",
+    ]) {
+      expect(text).toContain(needed);
+    }
   });
 });
 
