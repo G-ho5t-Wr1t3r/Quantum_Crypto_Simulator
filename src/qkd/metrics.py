@@ -39,7 +39,6 @@ def _check_validity(sample: Bits) -> bool:
         return False
     return all(bit in (0, 1) for bit in sample)
 
-# BB84 =========
 
 def qber(alice_sample: Bits, bob_sample: Bits) -> float:
     """Quantum Bit Error Rate estimated on a revealed sample.

@@ -150,15 +150,46 @@ class TestChshUncertainty:
         assert 2 + k * chsh_uncertainty(53) < ideal_s
 
 
-# TODO(B3): once the sign convention is derived and documented in `chsh_S`,
-#   add the test that pins it: feed the four correlators that the optimal
-#   angles produce — three at +1/sqrt(2) and the one under the minus at
-#   -1/sqrt(2) — and assert S == 2*sqrt(2). That test is what stops the
-#   convention from silently drifting later.
-#
-# TODO(D2): the end-to-end case belongs in test_e91.py — a simulated ideal run
-#   must give S ~ 2.83, and the tolerance follows from sigma_S ~ 2/sqrt(N) per
-#   setting, not from what makes the bar turn green.
+class TestChshSSignConvention:
+    """Pins the convention the class above deliberately leaves open.
+
+    With the angles fixed in `chsh_S` — Alice a1 = 0, a3 = 90; Bob b1 = 45,
+    b3 = 135 — the Bell state gives E = cos(theta_a - theta_b), so three
+    correlators come out at +1/sqrt(2) and the one whose settings are 135
+    degrees apart at -1/sqrt(2):
+
+        E(a1,b1) = cos(-45)  = +1/sqrt(2)
+        E(a1,b3) = cos(-135) = -1/sqrt(2)   <- the term carrying the minus
+        E(a3,b1) = cos(+45)  = +1/sqrt(2)
+        E(a3,b3) = cos(-45)  = +1/sqrt(2)
+
+    These are exact values, not estimates: no sample here, hence no tolerance
+    beyond floating point. The end-to-end counterpart, where the correlators
+    come from a simulated run and the tolerance follows from sigma_S, is
+    test_e91.TestChshViolation.test_ideal_run_reaches_tsirelson.
+    """
+
+    OPTIMAL = (1 / np.sqrt(2), -1 / np.sqrt(2), 1 / np.sqrt(2), 1 / np.sqrt(2))
+
+    def test_optimal_correlators_reach_tsirelson(self):
+        """Four terms of 1/sqrt(2) with the same effective sign: S = 4/sqrt(2).
+
+        This is what stops the convention from drifting. Move the minus in
+        `chsh_S` to any other position and the fourth term flips sign, leaving
+        2/sqrt(2) instead — a legal-looking value below the classical bound.
+        """
+        assert chsh_S(*self.OPTIMAL) == pytest.approx(2 * np.sqrt(2))
+
+    def test_swapping_the_two_middle_arguments_collapses_s_to_zero(self):
+        """The failure mode the four-float signature cannot prevent.
+
+        `chsh_S` takes four bare floats, so a call site is free to pass them
+        out of order and nothing raises. The middle two are the ones that get
+        swapped, since they differ only in which side changed setting, and
+        swapping them turns the maximum into exactly zero.
+        """
+        e_a1b1, e_a1b3, e_a3b1, e_a3b3 = self.OPTIMAL
+        assert chsh_S(e_a1b1, e_a3b1, e_a1b3, e_a3b3) == pytest.approx(0.0, abs=1e-12)
 
 
 # ---------------------------------------------------------------------------
