@@ -90,26 +90,12 @@ export function Stage({
   const dotOpacity = clamp01(beats.point * 3) * (1 - beats.pair) * alpha;
 
   // --- 03–05, the channel and the parties on it -----------------------------
-  const zoomOut = 1 - 0.58 * ease(beats.web);
-  const half = Math.min(width * 0.26, radius * 0.58) * zoomOut;
+  const half = Math.min(width * 0.26, radius * 0.58);
   const beamHalf = half * ease(beats.fibre);
   // Hard-zeroed rather than faded: by the planet beat nothing of the pair should
   // remain, and a ghost of it behind the Earth would read as a bug.
-  const gone = (1 - clamp01(beats.web * 1.5)) * (1 - clamp01(beats.earth * 2));
+  const gone = 1 - clamp01(beats.earth * 2);
   const beamAlpha = alpha * gone;
-
-  // --- 06, the network ------------------------------------------------------
-  const webAlpha = clamp01(beats.web * 1.2) * (1 - clamp01(beats.earth * 2.2)) * alpha;
-  const webPoints =
-    webAlpha > 0.02
-      ? Array.from({ length: 7 }, (_, index) => {
-          const u = -0.9 + 1.8 * (index / 6) + (rnd(index + 5) - 0.5) * 0.16;
-          return {
-            x: cx + lerp(0, u * half * 1.5, ease(beats.web)),
-            y: cy + (rnd(index + 90) - 0.45) * height * 0.34,
-          };
-        })
-      : null;
 
   // --- 07–08, the planet ----------------------------------------------------
   const earthFull = Math.min(height * 0.78, width * 0.44) * lerp(0.35, 1, ease(beats.earth));
@@ -119,7 +105,7 @@ export function Stage({
 
   const spheres: SphereSpec[] = [];
   const pairAlpha = beats.pair * alpha * gone;
-  const pairDiameter = lerp(20, 104, ease(beats.pair)) * zoomOut;
+  const pairDiameter = lerp(20, 104, ease(beats.pair));
   const add = (role: string, x: number, y: number, d: number, a: number, label?: string) => {
     if (a <= 0.02 || d < 8) return;
     spheres.push({ role, cx: x, cy: y, d, alpha: a, label });
@@ -129,17 +115,12 @@ export function Stage({
   add(
     "qb-red",
     cx,
-    cy + lerp(height * 0.26, height * 0.17, ease(beats.eve)) * zoomOut,
-    lerp(16, 78, ease(beats.eve)) * zoomOut,
+    cy + lerp(height * 0.26, height * 0.17, ease(beats.eve)),
+    lerp(16, 78, ease(beats.eve)),
     beats.eve * alpha * gone,
     "Eve",
   );
-  webPoints?.forEach((point, index) => {
-    const role = index === 0 ? "qb-blue" : index === 6 ? "qb-mint" : index === 3 ? "qb-red" : "qb-purple";
-    add(role, point.x, point.y, lerp(10, 42, ease(beats.web)) * (1 - 0.55 * ease(beats.earth)), webAlpha);
-  });
-
-  const photonsVisible = beats.fibre > 0.55 && beats.web < 0.3 && !reduced;
+  const photonsVisible = beats.fibre > 0.55 && beats.earth < 0.3 && !reduced;
 
   return (
     <div
@@ -246,23 +227,6 @@ export function Stage({
               />
             );
           })}
-
-        {webPoints &&
-          ([[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [1, 4], [2, 5], [0, 3]] as [number, number][]).map(
-            ([from, to], index) => (
-              <line
-                key={`web-${index}`}
-                x1={webPoints[from]!.x}
-                y1={webPoints[from]!.y}
-                x2={webPoints[to]!.x}
-                y2={webPoints[to]!.y}
-                stroke="var(--blue)"
-                strokeWidth={1.1}
-                opacity={0.34 * webAlpha}
-                strokeLinecap="round"
-              />
-            ),
-          )}
 
         {spheres.map((sphere, index) => {
           const r = sphere.d / 2;

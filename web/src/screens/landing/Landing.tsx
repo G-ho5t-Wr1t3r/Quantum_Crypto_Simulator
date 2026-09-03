@@ -11,14 +11,21 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { useNavigate } from "react-router-dom";
 
 import { useAppearance, useReducedMotion } from "../../app/appearance";
-import { LangSwitch, ThemeSwitch } from "../../components/AppearanceControls";
+import { LangInline } from "../../components/AppearanceControls";
+import { ThemeToggle } from "../../components/ScreenTabs";
 import { Footer } from "../../components/Footer";
 import { useCopy } from "../../i18n/useCopy";
 import { beatsFor } from "./beats";
 import { Stage } from "./Stage";
 
-/** How long the panel-expansion wipe runs before the route changes. */
-const WIPE_MS = 620;
+/**
+ * Durata dell'espansione del pannello.
+ *
+ * Corta di proposito: l'overlay è opaco, quindi ogni millisecondo in più è un
+ * millisecondo passato a guardare un rettangolo pieno invece della schermata
+ * che si sta aprendo. La rotta cambia appena l'espansione ha coperto tutto.
+ */
+const WIPE_MS = 300;
 
 export default function Landing() {
   const t = useCopy();
@@ -29,9 +36,19 @@ export default function Landing() {
   const root = useRef<HTMLDivElement>(null);
   const raf = useRef(0);
   const glide = useRef(0);
+  /** Alzato mentre la pagina si sposta da sola: letto dallo scroll handler. */
+  const gliding = useRef(false);
+  const [snapOff, setSnapOff] = useState(false);
   const [progress, setProgress] = useState(0);
   const [metrics, setMetrics] = useState({ width: 1200, height: 800, scrollHeight: 8000 });
-  const [expanding, setExpanding] = useState<"bb84" | "e91" | null>(null);
+  /**
+   * Il rettangolo da cui parte l'espansione, in coordinate di viewport.
+   *
+   * L'apertura è un `clip-path` che passa dal riquadro del pannello a tutto lo
+   * schermo: si anima sul compositor e non tocca il layout, a differenza di
+   * left/top/width/height.
+   */
+  const [wipe, setWipe] = useState<{ inset: string; open: boolean } | null>(null);
 
   useLayoutEffect(() => {
     const element = root.current;
@@ -50,7 +67,10 @@ export default function Landing() {
     // Coalesced into a frame: scroll fires far more often than the screen
     // repaints, and recomputing the whole scene per event buys nothing.
     const onScroll = () => {
-      if (raf.current) return;
+      // Durante lo scorrimento automatico è lo step a fissare `progress`, nello
+      // stesso frame in cui scrive scrollTop: passare anche di qui aggiungerebbe
+      // un frame di ritardo fra la posizione reale e la scena disegnata.
+      if (gliding.current || raf.current) return;
       raf.current = requestAnimationFrame(() => {
         raf.current = 0;
         const span = Math.max(1, element.scrollHeight - element.clientHeight);
@@ -88,11 +108,36 @@ export default function Landing() {
       const duration = Math.min(6500, Math.max(1800, Math.abs(to - from) * 1.15));
       const start = performance.now();
       cancelAnimationFrame(glide.current);
+
+      // Lo snap va spento per la durata del viaggio. Ogni frame qui scrive
+      // scrollTop senza che ci sia un gesto in corso, e il browser considera
+      // quello scroll concluso: con lo snap attivo riaggancia alla sezione più
+      // vicina, il frame dopo noi riportiamo la posizione avanti, e il risultato
+      // è l'oscillazione che si vede come scatto.
+      gliding.current = true;
+      setSnapOff(true);
+
+      const stop = () => {
+        gliding.current = false;
+        setSnapOff(false);
+        cancelAnimationFrame(glide.current);
+        container.removeEventListener("wheel", stop);
+        container.removeEventListener("touchstart", stop);
+      };
+      // Se l'utente riprende in mano lo scroll, il viaggio si ferma: continuare a
+      // riportarlo dove vogliamo noi significherebbe contendergli la pagina.
+      container.addEventListener("wheel", stop, { passive: true, once: true });
+      container.addEventListener("touchstart", stop, { passive: true, once: true });
+
+      const span = Math.max(1, container.scrollHeight - container.clientHeight);
       const step = (now: number) => {
         const u = Math.min(1, (now - start) / duration);
         const eased = u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
-        container.scrollTop = from + (to - from) * eased;
+        const top = from + (to - from) * eased;
+        container.scrollTop = top;
+        setProgress(Math.min(1, Math.max(0, top / span)));
         if (u < 1) glide.current = requestAnimationFrame(step);
+        else stop();
       };
       glide.current = requestAnimationFrame(step);
     },
@@ -100,14 +145,33 @@ export default function Landing() {
   );
 
   const openProtocol = useCallback(
-    (which: "bb84" | "e91") => {
-      setExpanding(which);
-      window.setTimeout(() => navigate(`/run?protocol=${which}`), reduced ? 0 : WIPE_MS);
+    (which: "bb84" | "e91", from?: HTMLElement) => {
+      const go = () => navigate(`/run?protocol=${which}`);
+      if (reduced || !from) {
+        go();
+        return;
+      }
+      const r = from.getBoundingClientRect();
+      const radius = getComputedStyle(from).borderRadius;
+      setWipe({
+        inset: `inset(${r.top}px ${window.innerWidth - r.right}px ${window.innerHeight - r.bottom}px ${r.left}px round ${radius})`,
+        open: false,
+      });
+      // Due frame: il primo dipinge il riquadro di partenza, il secondo fa
+      // scattare la transizione. Con uno solo il browser accorpa i due stati e
+      // l'espansione non si vede affatto.
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => setWipe((current) => (current ? { ...current, open: true } : current))),
+      );
+      window.setTimeout(go, WIPE_MS);
     },
     [navigate, reduced],
   );
 
   const beats = beatsFor(progress, metrics.height, metrics.scrollHeight);
+  // Durante l'espansione la scena è coperta: continuare a ricalcolarla toglie
+  // frame all'unica animazione che si sta ancora vedendo.
+  const stageHidden = wipe !== null;
 
   return (
     <div
@@ -118,10 +182,12 @@ export default function Landing() {
         overflowX: "hidden",
         background: "var(--bg)",
         color: "var(--fg)",
-        scrollSnapType: "y proximity",
+        scrollSnapType: snapOff ? "none" : "y proximity",
       }}
     >
-      <Stage beats={beats} width={metrics.width} height={metrics.height} dark={theme === "dark"} reduced={reduced} />
+      {!stageHidden && (
+        <Stage beats={beats} width={metrics.width} height={metrics.height} dark={theme === "dark"} reduced={reduced} />
+      )}
 
       <div style={{ marginTop: "-100vh", position: "relative", zIndex: 2 }}>
         <section
@@ -135,34 +201,6 @@ export default function Landing() {
           }}
         >
           <div style={{ maxWidth: "min(46%, 600px)", display: "flex", flexDirection: "column", gap: 22 }}>
-            <span
-              className="mono"
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 9,
-                alignSelf: "flex-start",
-                padding: "6px 13px",
-                borderRadius: 22,
-                border: "1px solid var(--line)",
-                background: "var(--panel)",
-                fontSize: 11,
-                color: "var(--fg-2)",
-                whiteSpace: "nowrap",
-                boxShadow: "inset 0 1px 0 var(--hi)",
-              }}
-            >
-              <span
-                style={{
-                  width: 6,
-                  height: 6,
-                  borderRadius: "50%",
-                  background: "var(--mint)",
-                  boxShadow: "0 0 7px -1px var(--mint)",
-                }}
-              />
-              {t.badge}
-            </span>
             <h1
               style={{
                 margin: 0,
@@ -230,9 +268,9 @@ export default function Landing() {
           </div>
         </section>
 
-        {t.story.map((beat) => (
+        {t.story.map((beat, beatIndex) => (
           <section
-            key={beat.step}
+            key={beatIndex}
             style={{
               minHeight: "170vh",
               display: "flex",
@@ -243,10 +281,12 @@ export default function Landing() {
               scrollSnapStop: "normal",
             }}
           >
+            {/* Un beat senza titolo è muto di proposito: la sezione serve solo a
+                dare all'animazione lo spazio per compiersi. Il campo `step` resta
+                in copy.ts come etichetta d'ordine per chi legge il sorgente, ma
+                non viene stampato. */}
+            {beat.title && (
             <div style={{ maxWidth: "min(44%, 540px)", display: "flex", flexDirection: "column", gap: 15 }}>
-              <span className="mono" style={{ fontSize: 11, letterSpacing: ".12em", color: "var(--blue)" }}>
-                {beat.step}
-              </span>
               <h2
                 style={{
                   margin: 0,
@@ -290,6 +330,7 @@ export default function Landing() {
                 </div>
               )}
             </div>
+            )}
           </section>
         ))}
 
@@ -306,9 +347,6 @@ export default function Landing() {
         >
           <div style={{ maxWidth: "min(46%, 560px)", display: "flex", flexDirection: "column", gap: 26 }}>
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              <span className="mono" style={{ fontSize: 11, letterSpacing: ".12em", color: "var(--blue)" }}>
-                {t.modelStep}
-              </span>
               <h2
                 style={{
                   margin: 0,
@@ -379,7 +417,9 @@ export default function Landing() {
                       </div>
                     ))}
                   </div>
-                  <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.6, color: "var(--fg-3)" }}>{card.foot}</p>
+                  {card.foot && (
+                    <p style={{ margin: 0, fontSize: 12.5, lineHeight: 1.6, color: "var(--fg-3)" }}>{card.foot}</p>
+                  )}
                 </div>
               ))}
             </div>
@@ -398,9 +438,6 @@ export default function Landing() {
           }}
         >
           <div style={{ padding: "9vh 8vw 4vh", display: "flex", flexDirection: "column", gap: 12, maxWidth: 640 }}>
-            <span className="mono" style={{ fontSize: 11, letterSpacing: ".12em", color: "var(--blue)" }}>
-              {t.chooseStep}
-            </span>
             <h2
               style={{
                 margin: 0,
@@ -412,7 +449,9 @@ export default function Landing() {
             >
               {t.chooseTitle}
             </h2>
-            <p style={{ margin: 0, fontSize: 15, lineHeight: 1.65, color: "var(--fg-2)" }}>{t.chooseBody}</p>
+            {t.chooseBody && (
+              <p style={{ margin: 0, fontSize: 15, lineHeight: 1.65, color: "var(--fg-2)" }}>{t.chooseBody}</p>
+            )}
           </div>
           <div
             style={{
@@ -427,15 +466,14 @@ export default function Landing() {
             {t.panels.map((panel, index) => {
               const which = index === 0 ? ("bb84" as const) : ("e91" as const);
               const color = index === 0 ? "var(--blue)" : "var(--purple)";
-              const active = expanding === which;
               return (
                 <div
                   key={panel.name}
-                  onClick={() => openProtocol(which)}
+                  onClick={(event) => openProtocol(which, event.currentTarget)}
                   role="button"
                   tabIndex={0}
                   onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") openProtocol(which);
+                    if (event.key === "Enter" || event.key === " ") openProtocol(which, event.currentTarget);
                   }}
                   style={{
                     position: "relative",
@@ -449,11 +487,7 @@ export default function Landing() {
                     border: "1px solid var(--line)",
                     background: "var(--panel)",
                     cursor: "pointer",
-                    transform: `scale(${active ? 1.06 : 1})`,
-                    boxShadow: active
-                      ? `0 40px 90px -40px #000, 0 0 0 1px ${color}`
-                      : "inset 0 1px 0 var(--hi)",
-                    transition: "transform .55s cubic-bezier(.32,.72,0,1), box-shadow .4s ease",
+                    boxShadow: "inset 0 1px 0 var(--hi)",
                   }}
                 >
                   <span
@@ -461,8 +495,7 @@ export default function Landing() {
                       position: "absolute",
                       inset: 0,
                       background: `radial-gradient(70% 60% at ${index === 0 ? "18%" : "82%"} 22%, color-mix(in oklab, ${color} 26%, transparent), transparent 70%)`,
-                      opacity: active ? 0.9 : 0.45,
-                      transition: "opacity .4s ease",
+                      opacity: 0.45,
                       pointerEvents: "none",
                     }}
                   />
@@ -499,9 +532,11 @@ export default function Landing() {
                     >
                       {t.ctaLabel}
                     </span>
-                    <span className="mono" style={{ fontSize: 11, color: "var(--fg-2)" }}>
-                      {panel.meta}
-                    </span>
+                    {panel.meta && (
+                      <span className="mono" style={{ fontSize: 11, color: "var(--fg-2)" }}>
+                        {panel.meta}
+                      </span>
+                    )}
                   </div>
                 </div>
               );
@@ -516,55 +551,29 @@ export default function Landing() {
         </div>
       </div>
 
+      {/* Preferenze d'aspetto, in alto a destra e volutamente defilate: non sono
+          il contenuto della pagina e non devono competere con il titolo. Nessuna
+          ombra e sfondo quasi trasparente, così la barra appartiene alla pagina
+          invece di stare appoggiata sopra. */}
       <div
         style={{
           position: "fixed",
-          top: 18,
-          left: "50%",
-          transform: "translateX(-50%)",
+          top: 16,
+          right: 16,
           zIndex: 10,
           display: "flex",
           alignItems: "center",
-          gap: 12,
-          padding: "7px 8px 7px 18px",
-          borderRadius: 22,
-          border: "1px solid var(--line)",
-          background: "var(--panel)",
-          boxShadow: "0 18px 40px -26px #000, inset 0 1px 0 var(--hi)",
+          gap: 4,
+          padding: "4px 6px 4px 12px",
+          borderRadius: 999,
+          border: "1px solid color-mix(in oklab, var(--line) 55%, transparent)",
+          background: "color-mix(in oklab, var(--panel) 55%, transparent)",
+          backdropFilter: "blur(12px)",
+          WebkitBackdropFilter: "blur(12px)",
         }}
       >
-        <span style={{ display: "flex", alignItems: "center", gap: 9 }}>
-          <span
-            style={{
-              width: 7,
-              height: 7,
-              borderRadius: "50%",
-              background: "var(--blue)",
-              boxShadow: "0 0 8px -1px var(--blue)",
-            }}
-          />
-          <span style={{ fontSize: 13, fontWeight: 590, whiteSpace: "nowrap" }}>QKD Simulator</span>
-        </span>
-        <span style={{ width: 1, height: 18, background: "var(--line)" }} />
-        <LangSwitch />
-        <ThemeSwitch />
-        <button
-          type="button"
-          onClick={() => navigate("/run")}
-          style={{
-            padding: "8px 15px",
-            borderRadius: 16,
-            border: "none",
-            background: "var(--fg)",
-            color: "var(--bg)",
-            fontSize: 12.5,
-            fontWeight: 590,
-            whiteSpace: "nowrap",
-            cursor: "pointer",
-          }}
-        >
-          {t.navCta}
-        </button>
+        <LangInline />
+        <ThemeToggle size={26} round bare />
       </div>
 
       <div
@@ -581,18 +590,23 @@ export default function Landing() {
         }}
       />
 
-      {expanding && (
+      {wipe && (
         <div
+          aria-hidden
           style={{
             position: "fixed",
             inset: 0,
             zIndex: 20,
-            background: `radial-gradient(circle at ${expanding === "bb84" ? "28%" : "72%"} 62%, color-mix(in oklab, ${expanding === "bb84" ? "var(--blue)" : "var(--purple)"} 40%, transparent), var(--bg) 62%)`,
-            animation: "qbreath .6s ease both",
+            background: "var(--bg)",
             pointerEvents: "none",
+            clipPath: wipe.open ? "inset(0px round 0px)" : wipe.inset,
+            transition: `clip-path ${WIPE_MS}ms cubic-bezier(.22, .61, .36, 1)`,
+            willChange: "clip-path",
+            transform: "translateZ(0)",
           }}
         />
       )}
+
     </div>
   );
 }

@@ -1,5 +1,5 @@
 /**
- * Turning scroll position into the eight beats of the story.
+ * Turning scroll position into the beats of the story.
  *
  * The unit is one section rather than a pixel count, so the choreography holds
  * whatever the viewport is: `k` is how much of the page one screen occupies, and
@@ -25,7 +25,6 @@ export interface Beats {
   fibre: number;
   pair: number;
   eve: number;
-  web: number;
   earth: number;
   earthOut: number;
   fade: number;
@@ -36,7 +35,7 @@ export function beatsFor(progress: number, viewport: number, scrollHeight: numbe
   // and an unguarded k would put every beat at once.
   const k = Math.min(0.34, Math.max(0.012, viewport / Math.max(1, scrollHeight - viewport)));
   const at = (index: number, offset: number) => k * (1 + SECTION * index + offset);
-  const model = (offset: number) => k * (1 + SECTION * 7 + offset);
+  const model = (offset: number) => k * (1 + SECTION * 6 + offset);
 
   return {
     grow: seg(progress, 0, at(0, 0.35)),
@@ -46,8 +45,7 @@ export function beatsFor(progress: number, viewport: number, scrollHeight: numbe
     fibre: seg(progress, at(2, 0), at(2, 0.7)),
     pair: seg(progress, at(3, 0), at(3, 0.65)),
     eve: seg(progress, at(4, 0), at(4, 0.6)),
-    web: seg(progress, at(5, 0), at(5, 0.7)),
-    earth: seg(progress, at(6, 0), at(6, 0.7)),
+    earth: seg(progress, at(5, 0), at(5, 0.7)),
     earthOut: seg(progress, model(0.5), model(1.2)),
     fade: seg(progress, model(1.15), model(1.45)),
   };

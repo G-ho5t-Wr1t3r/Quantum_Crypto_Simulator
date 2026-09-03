@@ -79,7 +79,10 @@ export function ScreenTabs() {
  * them to think about it. Auto is still what a fresh visit gets — the toggle
  * only appears to have an opinion once someone expresses one.
  */
-export function ThemeToggle() {
+export function ThemeToggle(
+  { size = 36, round = false, bare = false }:
+  { size?: number; round?: boolean; bare?: boolean } = {},
+) {
   const { theme, setChoice } = useAppearance();
   const t = useCopy();
   const next = theme === "dark" ? "light" : "dark";
@@ -91,20 +94,20 @@ export function ThemeToggle() {
       aria-label={t.themeToggle}
       title={t.themeToggle}
       style={{
-        width: 36,
-        height: 36,
+        width: size,
+        height: size,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        border: "1px solid var(--line)",
-        borderRadius: 10,
-        background: "var(--panel-2)",
-        color: "var(--fg-2)",
-        fontSize: 15,
+        border: bare ? "1px solid transparent" : "1px solid var(--line)",
+        borderRadius: round ? "50%" : 10,
+        background: bare ? "none" : "var(--panel-2)",
+        color: bare ? "var(--fg-3)" : "var(--fg-2)",
+        fontSize: Math.round(size * 0.42),
         lineHeight: 1,
         cursor: "pointer",
         flex: "none",
-        boxShadow: "inset 0 1px 0 var(--hi)",
+        boxShadow: bare ? "none" : "inset 0 1px 0 var(--hi)",
       }}
     >
       {theme === "dark" ? "☀" : "☾"}

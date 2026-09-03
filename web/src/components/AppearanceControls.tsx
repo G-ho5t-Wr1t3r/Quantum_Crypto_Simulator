@@ -38,3 +38,42 @@ export function ThemeSwitch() {
     />
   );
 }
+
+/**
+ * Lingua come coppia di voci testuali, per la barra della landing.
+ *
+ * Lì il Segmented sarebbe fuori registro: accanto al selettore del tema
+ * produce due riquadri affiancati dentro una pill, e la barra finisce per
+ * sembrare un pannello di controllo invece dell'intestazione di una pagina.
+ */
+export function LangInline() {
+  const { lang, setLang } = useAppearance();
+  const voci: Lang[] = ["it", "en"];
+
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
+      {voci.map((id, i) => (
+        <span key={id} style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
+          {i > 0 && <span aria-hidden style={{ width: 1, height: 11, background: "var(--line)" }} />}
+          <button
+            type="button"
+            aria-pressed={lang === id}
+            onClick={() => setLang(id)}
+            style={{
+              border: "none",
+              background: "none",
+              padding: 0,
+              fontSize: 12,
+              fontWeight: lang === id ? 640 : 500,
+              letterSpacing: ".02em",
+              color: lang === id ? "var(--fg)" : "var(--fg-3)",
+              cursor: "pointer",
+            }}
+          >
+            {id.toUpperCase()}
+          </button>
+        </span>
+      ))}
+    </span>
+  );
+}

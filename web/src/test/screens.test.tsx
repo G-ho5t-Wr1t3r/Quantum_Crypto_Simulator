@@ -164,9 +164,9 @@ beforeEach(() => {
 });
 
 describe("Landing", () => {
-  it("opens on the claim the whole page is making", () => {
+  it("opens on the name of the product", () => {
     mount(<Landing />);
-    expect(screen.getByRole("heading", { level: 1 }).textContent).toContain("misura");
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toContain("Quantum Crypto Simulator");
   });
 
   it("offers both protocols as a way in", () => {
