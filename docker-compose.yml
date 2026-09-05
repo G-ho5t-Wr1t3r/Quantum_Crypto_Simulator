@@ -6,7 +6,11 @@ services:
     volumes:
       # Mounted rather than baked in: the settings panel writes to this file,
       # and a change made through it has to outlive the container.
-      - ./config.json:/app/config.json
+      #
+      # `:Z` relabels the file for this container alone under SELinux (Fedora,
+      # RHEL, Bluefin, ...) — required for a rootless Podman to read it at all,
+      # and a harmless no-op on a Docker host without SELinux.
+      - ./config.json:/app/config.json:Z
     healthcheck:
       # Tests if the socket is open using the local interpeter instead of image
       test:
