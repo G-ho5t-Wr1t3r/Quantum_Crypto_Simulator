@@ -1,4 +1,5 @@
 # Quantum Crypto Simulator
+![Landing](report/assets/landing.png)
 
 <details open><summary>EN</summary>
 
