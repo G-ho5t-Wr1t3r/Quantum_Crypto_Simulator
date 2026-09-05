@@ -187,7 +187,7 @@ where the protocol can operate.
 
 ### Run Configuration
 
-<video controls src="report/assets/run_window.mp4" width="720"></video>
+<video controls src="https://github.com/G-ho5t-Wr1t3r/Quantum_Crypto_Simulator/raw/main/report/assets/run_window.mp4" width="720"></video>
 
 The left panel is the whole configuration. **Protocol** is BB84 or E91. **Channel** is ideal or
 amplitude damping; choosing damping reveals a slider that drives `γ` and reads the equivalent
@@ -214,7 +214,7 @@ trace is replaced by every trial's result plotted against the same threshold.
 
 ### Sweep
 
-<video controls src="report/assets/sweep_window.mp4" width="720"></video>
+<video controls src="https://github.com/G-ho5t-Wr1t3r/Quantum_Crypto_Simulator/raw/main/report/assets/sweep_window.mp4" width="720"></video>
 
 The axis is a closed set: the fibre length (equivalently `γ`) or the intercepted fraction. It is
 not a free path into the configuration, because sweeping the seed would draw a curve of pure
@@ -231,7 +231,7 @@ PNG, SVG or CSV, and the full sweep table opens in a panel of its own.
 
 ### Comparison — noise against attack, side by side
 
-<video controls src="report/assets/comparison_window.mp4" width="720"></video>
+<video controls src="https://github.com/G-ho5t-Wr1t3r/Quantum_Crypto_Simulator/raw/main/report/assets/comparison_window.mp4" width="720"></video>
 
 The claim is that the same mean QBER can come from a noisy fibre or from an eavesdropper. The
 screen proves it: both sides are distinct runs on the engine, started together, with the same
@@ -247,7 +247,7 @@ between the two `S` values sits inside the sampling uncertainty.
 
 ### Envelope
 
-<video controls src="report/assets/envelope_window.mp4" width="720"></video>
+<video controls src="https://github.com/G-ho5t-Wr1t3r/Quantum_Crypto_Simulator/raw/main/report/assets/envelope_window.mp4" width="720"></video>
 
 The envelope shows, for every fibre length (in a chosen range), how much interception is
 bearable.
@@ -468,7 +468,7 @@ JSON, esegue la prova in un thread di lavoro e trasmette gli eventi man mano che
 
 ### Run Configuration
 
-<video controls src="report/assets/run_window.mp4" width="720"></video>
+<video controls src="https://github.com/G-ho5t-Wr1t3r/Quantum_Crypto_Simulator/raw/main/report/assets/run_window.mp4" width="720"></video>
 
 Il pannello di sinistra è l'intera configurazione. **Protocol** è BB84 o E91. **Channel** è ideale
 o amplitude damping; scegliendo il damping compare uno slider che guida `γ` e ne legge accanto la
@@ -496,7 +496,7 @@ Per più ripetizioni, la traccia è sostituita dal risultato di ogni prova tracc
 
 ### Sweep
 
-<video controls src="report/assets/sweep_window.mp4" width="720"></video>
+<video controls src="https://github.com/G-ho5t-Wr1t3r/Quantum_Crypto_Simulator/raw/main/report/assets/sweep_window.mp4" width="720"></video>
 
 L'asse è un insieme chiuso: la lunghezza della fibra (equivalentemente `γ`) o la frazione
 intercettata. Non è un percorso libero nella configurazione, perché percorrere il seme
@@ -511,7 +511,7 @@ CSV, e la tabella completa dello sweep si apre in un pannello a sé.
 
 ### Comparison — rumore contro attacco, uno accanto all'altro
 
-<video controls src="report/assets/comparison_window.mp4" width="720"></video>
+<video controls src="https://github.com/G-ho5t-Wr1t3r/Quantum_Crypto_Simulator/raw/main/report/assets/comparison_window.mp4" width="720"></video>
 
 L'affermazione è che lo stesso QBER medio può venire da una fibra rumorosa o da un intercettatore.
 La schermata lo dimostra: entrambi i lati sono run distinte sul motore, lanciate insieme, con lo
@@ -526,7 +526,7 @@ una separazione simile: lo scarto fra i due valori di `S` sta dentro l'incertezz
 
 ### Envelope
 
-<video controls src="report/assets/envelope_window.mp4" width="720"></video>
+<video controls src="https://github.com/G-ho5t-Wr1t3r/Quantum_Crypto_Simulator/raw/main/report/assets/envelope_window.mp4" width="720"></video>
 
 L'inviluppo mostra, per ogni lunghezza di fibra (in un range scelto), quanta intercettazione è sopportabile.
 
