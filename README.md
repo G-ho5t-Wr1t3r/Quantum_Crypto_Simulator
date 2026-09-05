@@ -1,4 +1,4 @@
-<img width="800" height="450" alt="sweep_window" src="https://github.com/user-attachments/assets/7d234f8c-ee30-4437-8add-ae2b895f4ce0" /># Quantum Crypto Simulator
+# Quantum Crypto Simulator
 ![Landing](report/assets/landing.png)
 
 <details open><summary>EN</summary>
