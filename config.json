@@ -1,7 +1,7 @@
 {
   "limits": {
     "max_concurrent_runs": 5,
-    "run_history": 20,
+    "run_history": 24,
     "max_sync_qubits": 200
   },
   "contact": {
