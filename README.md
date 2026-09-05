@@ -188,7 +188,7 @@ where the protocol can operate.
 ### Run Configuration
 
 
-<img width="800" height="450" alt="run_window" src="https://github.com/user-attachments/assets/f3ba70fa-4ac7-4e4a-8a9e-ce2bbca28664" />
+<img src="report/assets/run_window.gif" alt="Run Configuration" width="100%" />
 
 
 The left panel is the whole configuration. **Protocol** is BB84 or E91. **Channel** is ideal or
@@ -218,7 +218,7 @@ trace is replaced by every trial's result plotted against the same threshold.
 
 
 
-https://github.com/user-attachments/assets/594183da-6eed-470e-ba36-03c03dac50c4
+<img src="report/assets/sweep_window.gif" alt="Sweep" width="100%" />
 
 
 
@@ -239,7 +239,7 @@ PNG, SVG or CSV, and the full sweep table opens in a panel of its own.
 
 
 
-https://github.com/user-attachments/assets/c44ec150-7cea-44df-8a64-cc95c5e58f0f
+<img src="report/assets/comparison_window.gif" alt="Comparison" width="100%" />
 
 
 
@@ -258,7 +258,7 @@ between the two `S` values sits inside the sampling uncertainty.
 ### Envelope
 
 
-https://github.com/user-attachments/assets/7898acbf-5a30-476d-8aaf-f53df6950296
+<img src="report/assets/envelope_window.gif" alt="Envelope" width="100%" />
 
 
 
@@ -481,7 +481,7 @@ JSON, esegue la prova in un thread di lavoro e trasmette gli eventi man mano che
 
 ### Run Configuration
 
-https://github.com/user-attachments/assets/f7b6d27b-4724-4a88-8bb0-ab589cdbc468
+<img src="report/assets/run_window.gif" alt="Run Configuration" width="100%" />
 
 Il pannello di sinistra è l'intera configurazione. **Protocol** è BB84 o E91. **Channel** è ideale
 o amplitude damping; scegliendo il damping compare uno slider che guida `γ` e ne legge accanto la
@@ -509,7 +509,7 @@ Per più ripetizioni, la traccia è sostituita dal risultato di ogni prova tracc
 
 ### Sweep
 
-https://github.com/user-attachments/assets/594183da-6eed-470e-ba36-03c03dac50c4
+<img src="report/assets/sweep_window.gif" alt="Sweep" width="100%" />
 
 L'asse è un insieme chiuso: la lunghezza della fibra (equivalentemente `γ`) o la frazione
 intercettata. Non è un percorso libero nella configurazione, perché percorrere il seme
@@ -524,7 +524,7 @@ CSV, e la tabella completa dello sweep si apre in un pannello a sé.
 
 ### Comparison — rumore contro attacco, uno accanto all'altro
 
-https://github.com/user-attachments/assets/c44ec150-7cea-44df-8a64-cc95c5e58f0f
+<img src="report/assets/comparison_window.gif" alt="Comparison" width="100%" />
 
 L'affermazione è che lo stesso QBER medio può venire da una fibra rumorosa o da un intercettatore.
 La schermata lo dimostra: entrambi i lati sono run distinte sul motore, lanciate insieme, con lo
@@ -539,7 +539,7 @@ una separazione simile: lo scarto fra i due valori di `S` sta dentro l'incertezz
 
 ### Envelope
 
-https://github.com/user-attachments/assets/7898acbf-5a30-476d-8aaf-f53df6950296
+<img src="report/assets/envelope_window.gif" alt="Envelope" width="100%" />
 
 L'inviluppo mostra, per ogni lunghezza di fibra (in un range scelto), quanta intercettazione è sopportabile.
 
