@@ -188,7 +188,7 @@ where the protocol can operate.
 ### Run Configuration
 
 
-https://github.com/user-attachments/assets/f7b6d27b-4724-4a88-8bb0-ab589cdbc468
+<img width="800" height="450" alt="run_window" src="https://github.com/user-attachments/assets/f3ba70fa-4ac7-4e4a-8a9e-ce2bbca28664" />
 
 
 The left panel is the whole configuration. **Protocol** is BB84 or E91. **Channel** is ideal or
