@@ -12,6 +12,7 @@
 
 import { useEffect, useState } from "react";
 
+import { ApiError } from "../api/client";
 import { useAppConfig, useSaveConfig } from "../api/queries";
 import type { AppConfig } from "../api/contract";
 import { useAppearance } from "../app/appearance";
@@ -121,7 +122,11 @@ export function Settings({ onClose }: { onClose: () => void }) {
               />
             </div>
 
-            {save.isError && <Banner tone="error">{String(save.error)}</Banner>}
+            {save.isError && (
+              <Banner tone="error">
+                {save.error instanceof ApiError ? save.error.detail : String(save.error)}
+              </Banner>
+            )}
           </>
         )}
 

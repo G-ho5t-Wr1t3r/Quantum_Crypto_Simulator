@@ -241,7 +241,19 @@ def write_config(config: appconfig.AppConfig) -> dict:
     is not acceptable on an open one. The bounds on `Limits` are what keeps a
     mistake from being unbounded; they are not a security control.
     """
-    appconfig.save(config)
+    try:
+        appconfig.save(config)
+    except OSError as exc:
+        # Whether the file can be written is a property of the deployment, not
+        # of the request, so it is worth naming: in a container the settings
+        # file is bind-mounted from the host and keeps the host's ownership,
+        # which is the one thing the image cannot arrange for itself. Left
+        # unhandled this surfaced as a bare 500 with no indication of why.
+        raise HTTPException(
+            status_code=500,
+            detail=f"Settings could not be written to {appconfig.CONFIG_PATH}: "
+            f"{exc.strerror}.",
+        ) from exc
     return config.model_dump()
 
 

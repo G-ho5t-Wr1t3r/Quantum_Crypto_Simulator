@@ -26,8 +26,8 @@ passing results.
 
 ### Development phases and workflow
 
-The backend is written in Python and adopts a plugin architecture, described in Section 7 [of the
-report]. The `src` folder contains all the files needed for the engine to work:
+The backend is written in Python and adopts a plugin architecture, described in Section 7 of the
+report. The `src` folder contains all the files needed for the engine to work:
 
 ```
 src/
@@ -172,6 +172,11 @@ the interface writes to it and the change outlives the container. Recreate the A
 (`docker compose up -d --force-recreate api`) after an out-of-band edit, or just use the Settings
 panel.
 
+A bind mount keeps the host file's ownership, so the API container has to run as a user that can
+write it. The compose file uses uid 0, which under a rootless Podman is not root at all but the
+unprivileged user who started the stack. On a rootful Docker host, set `QKD_UID=$(id -u)` and
+`QKD_GID=$(id -g)` to keep the service off root.
+
 The interface talks to the backend under an `/api` prefix that the reverse proxy strips. Behind
 the compose stack the auto-generated, always-accurate API reference is at
 <http://localhost:8000/api/docs> (Swagger UI) and <http://localhost:8000/api/openapi.json>.
@@ -271,7 +276,7 @@ orange with the share of the key the attacker knows. The real focus of the page 
 
 ## Stack
 
-- Python 3.12, Qiskit 2.3.1 with qiskit-aer (primitives V2)
+- Python 3.12+, Qiskit 2.3.1 with qiskit-aer (primitives V2)
 - FastAPI and pydantic for the API and configuration validation
 - React, Vite, TypeScript for the interface
 - Docker Compose (or Podman) for containerisation
@@ -328,7 +333,7 @@ automatici termina con il 100% di esiti positivi.
 ### Fasi e Modalità di sviluppo
 
 Il backend è scritto in Python e adotta un'architettura a plugin, descritta nella Sezione 7
-[della relazione]. Nella cartella `src` si trovano tutti i file necessari al funzionamento del
+della relazione. Nella cartella `src` si trovano tutti i file necessari al funzionamento del
 motore:
 
 ```
@@ -470,6 +475,12 @@ di qubit per le run sincrone) e i link di contatto stampati nel footer. Essendo 
 Ricreare il servizio API (`docker compose up -d --force-recreate api`) dopo una modifica esterna,
 oppure usare direttamente il pannello Impostazioni.
 
+Il bind mount conserva la proprietà che il file ha sull'host, quindi il container dell'API deve
+girare con un utente in grado di scriverlo. Il compose file usa l'uid 0, che sotto un Podman
+rootless non è affatto root ma l'utente non privilegiato che ha avviato lo stack. Su un host
+Docker rootful, impostare `QKD_UID=$(id -u)` e `QKD_GID=$(id -g)` per non eseguire il servizio
+come root.
+
 L'interfaccia parla con il backend sotto un prefisso `/api` che il reverse proxy rimuove.
 Dietro lo stack di compose il riferimento API auto-generato e sempre aggiornato è a
 <http://localhost:8000/api/docs> (Swagger UI) e <http://localhost:8000/api/openapi.json>.
@@ -550,7 +561,7 @@ La mappa è esportabile come PNG, SVG o CSV.
 
 ## Stack
 
-- Python 3.12, Qiskit 2.3.1 con qiskit-aer (primitives V2)
+- Python 3.12+, Qiskit 2.3.1 con qiskit-aer (primitives V2)
 - FastAPI e pydantic per l'API e la validazione della configurazione
 - React, Vite, TypeScript per l'interfaccia
 - Docker Compose (o Podman) per la containerizzazione

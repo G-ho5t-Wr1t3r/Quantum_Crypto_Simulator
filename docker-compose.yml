@@ -11,8 +11,17 @@ services:
       # RHEL, Bluefin, ...) — required for a rootless Podman to read it at all,
       # and a harmless no-op on a Docker host without SELinux.
       - ./config.json:/app/config.json:Z
+    # A bind mount keeps the host file's ownership, which the image cannot know
+    # in advance: under a rootless Podman the user who started the stack appears
+    # inside the container as uid 0, under Docker as their own uid. The image's
+    # own `qkd` user (10001) matches neither, so it could read the file but not
+    # write it, and saving from the settings panel failed with EACCES. Uid 0 is
+    # the one value that works in both cases — and under rootless Podman it is
+    # not root at all, only the unprivileged user who ran `podman compose`.
+    # On a rootful Docker host, set QKD_UID=$(id -u) to stay off root.
+    user: "${QKD_UID:-0}:${QKD_GID:-0}"
     healthcheck:
-      # Tests if the socket is open using the local interpeter instead of image
+      # Tests if the socket is open using the local interpreter instead of image
       test:
         - CMD
         - python

@@ -1,8 +1,9 @@
-# Python 3.14
+# Python 3.12 or later. The container image pins 3.12; the code is also
+# developed and tested on 3.14.
 #
 # In a conda environment:
-#   conda create -n quantum python=3.14
-#   conda activate qkd
+#   conda create -n quantum python=3.12
+#   conda activate quantum
 #   pip install -r requirements.txt
 #
 # Qiskit is pinned because the whole simulation depends on the 2.x primitives API.
