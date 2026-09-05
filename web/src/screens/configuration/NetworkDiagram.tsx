@@ -435,6 +435,7 @@ export function NetworkDiagram({
             type="button"
             onClick={() => onSelect(node.id)}
             title={node.label}
+            data-testid={`node-${node.id}`}
             style={{
               position: "absolute",
               left: point.x,

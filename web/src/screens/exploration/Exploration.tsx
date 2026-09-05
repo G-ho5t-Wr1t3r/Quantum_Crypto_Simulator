@@ -464,6 +464,7 @@ export default function Exploration() {
             <Kicker>{t.protocol}</Kicker>
             <Segmented
               wide
+              testId="protocol"
               options={[
                 { id: "bb84" as ProtocolKind, label: "BB84" },
                 { id: "e91" as ProtocolKind, label: "E91" },
@@ -488,6 +489,7 @@ export default function Exploration() {
                     type="button"
                     disabled={run.isRunning}
                     onClick={() => changeAxis(option.id)}
+                    data-testid={`axis-${option.id}`}
                     style={{
                       display: "flex",
                       alignItems: "center",
@@ -538,6 +540,7 @@ export default function Exploration() {
           >
             <Slider
               label={t.rangeMin}
+              testId="range-min"
               display={onKm ? `${lo.toFixed(1)} km · γ ${gammaFromLength(lo).toFixed(3)}` : lo.toFixed(range.decimals)}
               min={range.min}
               max={range.max}
@@ -548,6 +551,7 @@ export default function Exploration() {
             />
             <Slider
               label={t.rangeMax}
+              testId="range-max"
               display={onKm ? `${hi.toFixed(1)} km · γ ${gammaFromLength(hi).toFixed(3)}` : hi.toFixed(range.decimals)}
               min={range.min}
               max={range.max}
@@ -559,6 +563,7 @@ export default function Exploration() {
             <SeedField value={seed} onChange={(next) => { setSeed(next); run.reset(); }} disabled={run.isRunning} />
             <Slider
               label={t.points}
+              testId="sweep-points"
               display={`${points} · ${t.stepLabel} ${
                 onKm ? `${((hi - lo) / (points - 1)).toFixed(2)} km` : ((hi - lo) / (points - 1)).toFixed(3)
               }`}
@@ -823,6 +828,7 @@ export default function Exploration() {
                   type="button"
                   onClick={() => setExpanded(true)}
                   disabled={!done || run.isRunning}
+                  data-testid="expand-table"
                   className="mono"
                   style={{
                     padding: "5px 11px",

@@ -204,6 +204,12 @@ const it = {
   qberX: "QBER diagonale",
   siftedKey: "Chiave siftata",
   siftingRatio: "sifting ratio",
+  // Il motivo del verdetto. Il motore lo restituisce già formattato, ma sempre
+  // in inglese: è pensato per chi legge l'API, non per l'interfaccia. Qui viene
+  // ricomposto dagli stessi valori, che il frontend ha già, così segue la
+  // lingua scelta invece di ignorarla.
+  againstThreshold: "contro una soglia di",
+  againstBound: "contro un limite di",
   eveKnows: "Conoscenza di Eve",
   chsh: "CHSH",
   naProtocol: "non applicabile a questo protocollo",
@@ -604,6 +610,8 @@ const en: Copy = {
   qberX: "Diagonal QBER",
   siftedKey: "Sifted key",
   siftingRatio: "sifting ratio",
+  againstThreshold: "against a threshold of",
+  againstBound: "against a bound of",
   eveKnows: "Eve's knowledge",
   chsh: "CHSH",
   naProtocol: "not applicable to this protocol",

@@ -362,6 +362,7 @@ export default function Comparison() {
             <Segmented<ProtocolKind>
               wide
               label={t.protocol}
+              testId="protocol"
               options={[
                 { id: "bb84", label: "BB84" },
                 { id: "e91", label: "E91" },
@@ -376,6 +377,7 @@ export default function Comparison() {
           <div style={{ display: "flex", flexDirection: "column", gap: 8, flex: "1 1 280px", minWidth: 250 }}>
             <Slider
               label={t.fibreControl}
+              testId="fibre-length"
               display={`${km.toFixed(1)} km · γ ${gamma.toFixed(3)}`}
               min={0}
               max={20}
@@ -388,6 +390,7 @@ export default function Comparison() {
           <div style={{ display: "flex", flexDirection: "column", gap: 8, flex: "1 1 280px", minWidth: 250 }}>
             <Slider
               label={t.fractionControl}
+              testId="attack-fraction"
               display={`${(fraction * 100).toFixed(0)} %`}
               min={0}
               max={1}

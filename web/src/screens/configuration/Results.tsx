@@ -36,9 +36,8 @@ function Card({ label, value, sub, color }: CardSpec) {
   return (
     <div
       style={{
-        border: "1px solid var(--line)",
         borderRadius: 14,
-        padding: "14px 15px",
+        padding: "15px 16px",
         background: "var(--panel)",
         display: "flex",
         flexDirection: "column",
@@ -129,9 +128,8 @@ function TraceCell({ cell }: { cell: CellSpec }) {
         alignItems: "center",
         height: 30,
         padding: "3px 0 2px",
-        borderRadius: 5,
-        border: `1px solid ${cell.dim ? "var(--line)" : `color-mix(in oklab, ${cell.color} 42%, transparent)`}`,
-        background: cell.dim ? "var(--seg)" : `color-mix(in oklab, ${cell.color} 16%, var(--panel-2))`,
+        borderRadius: 6,
+        background: cell.dim ? "var(--seg)" : `color-mix(in oklab, ${cell.color} 22%, var(--panel-2))`,
         // Each cell arrives rather than appears: the row reads as being written
         // left to right, which is the order the qubits actually went in.
         animation: "qrise .22s cubic-bezier(.32,.72,0,1) both",
@@ -256,7 +254,6 @@ function Trace({
       <div
         ref={ref}
         style={{
-          border: "1px solid var(--line)",
           borderRadius: 14,
           background: "var(--panel)",
           padding: "14px 16px",
@@ -506,7 +503,6 @@ function TrialComparison({
 
       <div
         style={{
-          border: "1px solid var(--line)",
           borderRadius: 14,
           background: "var(--panel)",
           padding: "16px 18px 14px",
@@ -747,6 +743,14 @@ export function Results({
         caption: t.chartCapE91,
       };
 
+  // Ricomposto invece di essere ripreso da `result.reason`: quel testo arriva
+  // dal motore sempre in inglese, e mostrarlo così com'è lasciava una riga non
+  // tradotta nel mezzo di una schermata per il resto localizzata. I valori sono
+  // gli stessi, e sono già tutti qui.
+  const reason = measured(chsh)
+    ? `S = ${chsh.toFixed(3)} ${t.againstBound} ${(chshBound ?? 2).toFixed(3)}`
+    : `QBER = ${qber.toFixed(4)} ${t.againstThreshold} ${threshold}`;
+
   const readoutsIn = replay.estimate > 0;
 
   return (
@@ -769,8 +773,7 @@ export function Results({
                 whiteSpace: "nowrap",
                 padding: "8px 14px",
                 borderRadius: 20,
-                border: `1px solid ${result.accepted ? "var(--mint)" : "var(--red)"}`,
-                background: "var(--panel-2)",
+                background: `color-mix(in oklab, ${result.accepted ? "var(--mint)" : "var(--red)"} 15%, var(--panel-2))`,
                 color: result.accepted ? "var(--mint)" : "var(--red)",
                 fontSize: 11.5,
                 fontWeight: 600,
@@ -784,7 +787,7 @@ export function Results({
         {/* Shown verbatim: a rejection whose grounds are not stated is
             indistinguishable from a bug. */}
         <span className="mono" style={{ fontSize: 12.5, color: "var(--fg-2)" }}>
-          {result.reason}
+          {reason}
         </span>
         <span style={{ flex: 1 }} />
         <span className="mono" style={{ fontSize: 11, color: "var(--fg-3)" }}>
@@ -798,7 +801,6 @@ export function Results({
               fontSize: 11,
               padding: "6px 12px",
               borderRadius: 9,
-              border: "1px solid var(--line)",
               background: "var(--panel-2)",
               color: "var(--fg-2)",
             }}

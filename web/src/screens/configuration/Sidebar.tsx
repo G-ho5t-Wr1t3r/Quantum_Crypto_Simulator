@@ -173,6 +173,7 @@ export function Sidebar({
           <Kicker>{t.channel}</Kicker>
           <Segmented
             wide
+            testId="channel-kind"
             options={[
               { id: "ideal" as const, label: t.ideal },
               { id: "amplitude_damping" as const, label: t.damping },
@@ -187,6 +188,7 @@ export function Sidebar({
             // fibre, and it is what the reader actually pictures.
             <Slider
               label={t.attenuation}
+              testId="channel-gamma"
               display={`γ ${params.gamma.toFixed(3)} · ${lengthFromGamma(params.gamma).toFixed(1)} km`}
               hint={t.attenuationHint}
               min={range("ChannelConfig.gamma", 0, 0.5).min}
@@ -203,6 +205,7 @@ export function Sidebar({
           <Kicker>{t.attack}</Kicker>
           <Segmented
             wide
+            testId="attack-kind"
             options={[
               { id: "none" as const, label: t.noAttack },
               { id: "intercept_resend" as const, label: t.interceptResend },
@@ -222,6 +225,7 @@ export function Sidebar({
                   <span style={{ fontSize: 12, color: "var(--fg-3)" }}>{t.position}</span>
                   <Segmented
                     wide
+                    testId="attack-position"
                     options={[
                       { id: "channel" as const, label: t.posChannel },
                       { id: "endpoint" as const, label: t.posEndpoint },
@@ -234,6 +238,7 @@ export function Sidebar({
               )}
               <Slider
                 label={t.fraction}
+                testId="attack-fraction"
                 display={`${(params.fraction * 100).toFixed(0)} %`}
                 hint={t.fractionHint}
                 min={range("AttackConfig.fraction", 0, 1).min}
@@ -251,6 +256,7 @@ export function Sidebar({
           <Kicker>{t.run}</Kicker>
           <Slider
             label={t.qubits}
+            testId="run-qubits"
             display={params.nQubits.toLocaleString(locale)}
             hint={t.qubitsHint}
             min={range("n_qubits", 200, 20000).min}
@@ -262,6 +268,7 @@ export function Sidebar({
           />
           <Slider
             label={t.trials}
+            testId="run-trials"
             display={String(params.trials)}
             hint={t.trialsHint}
             min={range("trials", 1, 20).min}

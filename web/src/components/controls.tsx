@@ -41,6 +41,7 @@ export function Segmented<T extends string | null>({
   label,
   disabled = false,
   style,
+  testId,
 }: {
   options: Option<T>[];
   value: T;
@@ -64,11 +65,14 @@ export function Segmented<T extends string | null>({
    */
   label?: string;
   style?: CSSProperties;
+  /** A stable hook for automated interaction (tests, scripted demos). */
+  testId?: string;
 }) {
   return (
     <div
       role="radiogroup"
       aria-label={label}
+      data-testid={testId}
       style={{
         display: "flex",
         gap: 3,
@@ -163,6 +167,7 @@ export function Slider({
   value,
   onChange,
   disabled = false,
+  testId,
 }: {
   label: string;
   display: string;
@@ -174,6 +179,8 @@ export function Slider({
   onChange: (value: number) => void;
   /** Locked while a run is in flight; see `Segmented`. */
   disabled?: boolean;
+  /** A stable hook for automated interaction (tests, scripted demos). */
+  testId?: string;
 }) {
   // Stepping in floating point drifts: 0.1 + 0.005 is not 0.105. Rounding to
   // the grid the step defines keeps the value on it.
@@ -198,6 +205,7 @@ export function Slider({
       <input
         type="range"
         aria-label={label}
+        data-testid={testId}
         min={min}
         max={max}
         step={step}
@@ -294,6 +302,7 @@ export function RunButton({
       type="button"
       onClick={stoppable ? onStop : onClick}
       disabled={busy && !stoppable}
+      data-testid="run-button"
       style={{
         padding: 13,
         borderRadius: 11,

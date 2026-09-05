@@ -219,6 +219,7 @@ export default function Envelope() {
             <Segmented<ProtocolKind>
               wide
               label={t.protocol}
+              testId="protocol"
               disabled={map.running}
               options={[
                 { id: "bb84", label: "BB84" },
@@ -232,6 +233,7 @@ export default function Envelope() {
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <Slider
               label={t.maxLength}
+              testId="max-length"
               display={`${maxKm} km`}
               min={2}
               max={30}
@@ -242,6 +244,7 @@ export default function Envelope() {
             />
             <Slider
               label={t.lengthSteps}
+              testId="length-steps"
               display={String(lengthSteps)}
               min={3}
               max={15}
@@ -252,6 +255,7 @@ export default function Envelope() {
             />
             <Slider
               label={t.fractionSteps}
+              testId="fraction-steps"
               display={String(fractionSteps)}
               min={3}
               max={15}
@@ -263,6 +267,7 @@ export default function Envelope() {
             <SeedField value={seed} onChange={set(setSeed)} disabled={map.running} />
             <Slider
               label={t.qubitsPerCell}
+              testId="qubits-per-cell"
               display={qubits.toLocaleString(locale)}
               min={200}
               max={2000}

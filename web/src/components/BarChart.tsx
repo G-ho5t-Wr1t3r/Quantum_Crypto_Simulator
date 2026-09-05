@@ -47,8 +47,7 @@ function zoneChip(color: string, pushRight: boolean): CSSProperties {
     gap: 5,
     padding: "4px 9px",
     borderRadius: 6,
-    border: `1px solid color-mix(in oklab, ${color} 34%, transparent)`,
-    background: `color-mix(in oklab, ${color} 12%, transparent)`,
+    background: `color-mix(in oklab, ${color} 14%, transparent)`,
     color,
     fontSize: 9.5,
     letterSpacing: ".06em",
@@ -84,7 +83,6 @@ export function BarChart({
   return (
     <div
       style={{
-        border: "1px solid var(--line)",
         borderRadius: 14,
         background: "var(--panel)",
         padding: "16px 18px 14px",

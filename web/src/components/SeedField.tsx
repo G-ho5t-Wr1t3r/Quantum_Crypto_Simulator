@@ -42,6 +42,7 @@ export function SeedField({
         <input
           value={value}
           aria-label={t.seed}
+          data-testid="seed-input"
           disabled={disabled}
           onChange={(event) => onChange(parseInt(event.target.value.replace(/\D/g, "") || "0", 10))}
           className="mono"
@@ -61,6 +62,7 @@ export function SeedField({
           type="button"
           title={t.randomize}
           aria-label={t.randomize}
+          data-testid="seed-randomize"
           disabled={disabled}
           onClick={() => onChange(rollSeed())}
           style={{
