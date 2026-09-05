@@ -4,3 +4,4 @@ dist
 
 tsconfig.tsbuildinfo
 demo*
+web/rc/demo*
