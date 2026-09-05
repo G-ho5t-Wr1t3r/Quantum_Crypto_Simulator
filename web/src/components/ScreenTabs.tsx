@@ -22,7 +22,7 @@ import { Settings } from "./Settings";
 const TABS = [
   { to: "/run", label: "Run" },
   { to: "/explore", label: "Sweep" },
-  { to: "/compare", label: "Compare" },
+  { to: "/compare", label: "Comparison" },
   { to: "/envelope", label: "Envelope" },
 ];
 

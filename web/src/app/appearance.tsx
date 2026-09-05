@@ -69,8 +69,15 @@ function storedChoice(): ThemeChoice {
   return value === "dark" || value === "light" ? value : null;
 }
 
-export function AppearanceProvider({ children }: { children: ReactNode }) {
-  const [lang, setLangState] = useState<Lang>(storedLang);
+export function AppearanceProvider({
+  children,
+  initialLang,
+}: {
+  children: ReactNode;
+  /** Overrides the stored preference for this mount, without touching storage. */
+  initialLang?: Lang;
+}) {
+  const [lang, setLangState] = useState<Lang>(() => initialLang ?? storedLang());
   const [choice, setChoiceState] = useState<ThemeChoice>(storedChoice);
   const [system, setSystem] = useState<Theme>("dark");
 

@@ -755,6 +755,7 @@ export function Results({
 
   return (
     <section
+      data-testid="results-section"
       style={{
         borderTop: "1px solid var(--line)",
         background: "var(--bg-2)",

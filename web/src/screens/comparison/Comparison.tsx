@@ -439,6 +439,7 @@ export default function Comparison() {
         </section>
 
         <section
+          data-testid="results-grid"
           style={{
             display: "grid",
             gridTemplateColumns: "repeat(auto-fit, minmax(380px, 1fr))",

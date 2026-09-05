@@ -715,7 +715,7 @@ describe("Moving between the screens", () => {
   it("shows all four as tabs and marks the one you are on", () => {
     mount(<Exploration />, "/explore");
     const tabs = within(screen.getByRole("navigation", { name: "Screens" }));
-    for (const label of ["Run", "Sweep", "Compare", "Envelope"]) {
+    for (const label of ["Run", "Sweep", "Comparison", "Envelope"]) {
       expect(tabs.getByText(label)).toBeDefined();
     }
     // Four ways of asking about the same simulator, not a sequence: the bar
@@ -776,7 +776,7 @@ describe("Moving between the screens", () => {
     const tabs = within(screen.getByRole("navigation", { name: "Screens" }));
     // A name that changes with the language is a name two people cannot use to
     // refer to the same thing.
-    expect(tabs.getByText("Compare").getAttribute("aria-current")).toBe("page");
+    expect(tabs.getByText("Comparison").getAttribute("aria-current")).toBe("page");
     expect(screen.getByText("LATO A")).toBeDefined();
   });
 });

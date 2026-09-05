@@ -3,5 +3,8 @@ dist
 *.local
 
 tsconfig.tsbuildinfo
-demo*
-src/demo/*
+
+# Recording harness: local-only, never shipped, isolated from the real app.
+/demo.html
+/demo-frame.html
+/src/demo/
