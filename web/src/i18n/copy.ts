@@ -424,6 +424,45 @@ const it = {
   busy: "Il server sta già eseguendo il massimo di run simultanee. Riprova fra poco.",
   tooSmallE91:
     "E91 ha bisogno di almeno 100 coppie: con meno, una delle nove combinazioni di angoli può restare senza campioni e il parametro di Bell non è stimabile.",
+
+  // Network ------------------------------------------------------------------
+  networkKicker: "Rete multi-hop",
+  networkIntro:
+    "Una distanza lunga, coperta a tappe corte. Ogni tappa resta abbastanza breve da funzionare; il prezzo è un nodo intermedio che va fidato.",
+  networkStrategy: "Strategia",
+  strategyChain: "Catena di nodi fidati",
+  strategySplit: "Percorsi frammentati",
+  networkRelays: "Nodi intermedi per percorso",
+  networkRelaysHint: "Quante tappe separano sorgente e destinazione, su ciascun percorso.",
+  networkPaths: "Percorsi paralleli",
+  networkPathsHint: "Solo nei percorsi frammentati: la chiave si divide in altrettanti pezzi, uno per percorso.",
+  networkHopLength: "Lunghezza di una tappa",
+  networkHopLengthHint:
+    "Sotto questa build una tappa smette di produrre chiave intorno ai 7 km: il valore resta sotto quella soglia.",
+  networkQubits: "Qubit per tappa",
+  networkCompromised: "Nodi compromessi",
+  networkCompromisedHint: "Quanti nodi intermedi, scelti a caso, l'attaccante possiede.",
+  networkRun: "Simula la rete",
+  networkStop: "Interrompi",
+  networkResultKicker: "Risultato",
+  networkDelivered: "Chiave consegnata",
+  networkDropped: "Chiave scartata: la distanza ha vinto",
+  networkLeaked: "Chiave trapelata",
+  networkKeyBits: "Bit di chiave",
+  networkWorstHop: "QBER peggiore",
+  networkTotalLength: "Distanza totale",
+  networkCompareKicker: "Confronto",
+  networkCompareBody:
+    "Stessa rete, stesso numero di nodi compromessi: quanta chiave resta leggibile con una catena rispetto a percorsi frammentati.",
+  networkCompareRun: "Confronta le due strategie",
+  networkCompareNeedsRelay: "Serve almeno un nodo intermedio per confrontare le due strategie.",
+  networkChartTitle: "Chiave trapelata contro nodi compromessi",
+  networkChartSubtitle: "stessa rete, due strategie",
+  networkChartXTitle: "Nodi compromessi",
+  networkChartYTitle: "Chiave trapelata",
+  networkRunLabel: "punto",
+  networkSeriesChain: "Catena",
+  networkSeriesSplit: "Split",
 };
 
 export type Copy = typeof it;
@@ -822,6 +861,45 @@ const en: Copy = {
   busy: "The server is already running the maximum number of concurrent runs. Try again shortly.",
   tooSmallE91:
     "E91 needs at least 100 pairs: with fewer, one of the nine angle combinations can end up with no samples and the Bell parameter cannot be estimated.",
+
+  // Network --------------------------------------------------------------
+  networkKicker: "Multi-hop network",
+  networkIntro:
+    "A long distance, covered in short hops. Each hop stays short enough to work; the price is an intermediate node that has to be trusted.",
+  networkStrategy: "Strategy",
+  strategyChain: "Trusted relay chain",
+  strategySplit: "Split paths",
+  networkRelays: "Relays per route",
+  networkRelaysHint: "How many hops separate source and target, on each route.",
+  networkPaths: "Parallel paths",
+  networkPathsHint: "Split paths only: the key breaks into as many fragments, one per route.",
+  networkHopLength: "Length of one hop",
+  networkHopLengthHint:
+    "Under this build a hop stops producing a key around 7 km: the value stays below that threshold.",
+  networkQubits: "Qubits per hop",
+  networkCompromised: "Compromised relays",
+  networkCompromisedHint: "How many intermediate nodes, drawn at random, the adversary owns.",
+  networkRun: "Simulate the network",
+  networkStop: "Stop",
+  networkResultKicker: "Result",
+  networkDelivered: "Key delivered",
+  networkDropped: "Key dropped: distance won",
+  networkLeaked: "Key leaked",
+  networkKeyBits: "Key bits",
+  networkWorstHop: "Worst-hop QBER",
+  networkTotalLength: "Total distance",
+  networkCompareKicker: "Comparison",
+  networkCompareBody:
+    "Same network, same number of compromised nodes: how much key stays readable with a chain against split paths.",
+  networkCompareRun: "Compare both strategies",
+  networkCompareNeedsRelay: "At least one relay is needed to compare the two strategies.",
+  networkChartTitle: "Key leaked against compromised relays",
+  networkChartSubtitle: "same network, two strategies",
+  networkChartXTitle: "Compromised relays",
+  networkChartYTitle: "Key leaked",
+  networkRunLabel: "point",
+  networkSeriesChain: "Chain",
+  networkSeriesSplit: "Split",
 };
 
 export const COPY = { it, en } as const;

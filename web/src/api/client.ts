@@ -9,6 +9,8 @@
 
 import type {
   AppConfig,
+  NetworkSimulationConfig,
+  NetworkSweepRequest,
   Plugins,
   RunHandle,
   RunResult,
@@ -111,6 +113,9 @@ export const getPlugins = () => request<Plugins>("/plugins");
  */
 export const getSchema = () => request<Record<string, unknown>>("/schema");
 
+/** The JSON Schema of a multi-hop configuration — a route, not a channel. */
+export const getNetworkSchema = () => request<Record<string, unknown>>("/network/schema");
+
 // ---------------------------------------------------------------------------
 // Running
 // ---------------------------------------------------------------------------
@@ -122,6 +127,17 @@ export const startRun = (config: SimulationConfig) =>
 /** Start a sweep. Each point is a full run, so this is the long case. */
 export const startSweep = (sweep: SweepRequest) =>
   request<RunHandle>("/sweep", { method: "POST", body: JSON.stringify(sweep) });
+
+/**
+ * Start a multi-hop run. Always asynchronous: even the cheapest route is
+ * several full simulations, one per hop.
+ */
+export const startNetworkRun = (config: NetworkSimulationConfig) =>
+  request<RunHandle>("/network/simulate", { method: "POST", body: JSON.stringify(config) });
+
+/** Start a sweep over a property of the route — every point is a whole route. */
+export const startNetworkSweep = (sweep: NetworkSweepRequest) =>
+  request<RunHandle>("/network/sweep", { method: "POST", body: JSON.stringify(sweep) });
 
 /**
  * Run something small and get the answer in the same response.

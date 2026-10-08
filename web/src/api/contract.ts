@@ -306,6 +306,139 @@ export interface Plugins {
   topologies: Record<ProtocolKind, Topology>;
 }
 
+// ---------------------------------------------------------------------------
+// Multi-hop network — distance covered by a route rather than by one channel
+// ---------------------------------------------------------------------------
+
+/** The shape of the route: one line of relays, or several sharing only the ends. */
+export type NetworkTopologyKind = "chain" | "fan";
+
+/**
+ * How the key crosses the route.
+ *
+ * `relay_chain` forwards the whole key hop by hop; every relay holds it in the
+ * clear for an instant. `split_paths` fragments the key, one fragment per
+ * route, and no relay ever sees more than its own.
+ */
+export type NetworkStrategyKind = "relay_chain" | "split_paths";
+
+export interface NetworkConfig {
+  topology?: NetworkTopologyKind;
+  strategy?: NetworkStrategyKind;
+  hop_length_km?: number;
+  relays?: number;
+  paths?: number;
+  threshold?: number | null;
+  compromised?: string[] | null;
+  compromised_count?: number | null;
+  attack_draws?: number;
+}
+
+export interface NetworkSimulationConfig {
+  protocol?: ProtocolKind;
+  n_qubits?: number;
+  trials?: number;
+  seed: number;
+  network?: NetworkConfig;
+  security?: SecurityPolicy;
+}
+
+export type NetworkSweepAxis = "hop_length_km" | "relays" | "paths" | "compromised";
+
+export interface NetworkSweepRequest {
+  config: NetworkSimulationConfig;
+  axis: NetworkSweepAxis;
+  start: number;
+  stop: number;
+  points?: number;
+}
+
+/** One link in a route: the ordinary point-to-point engine, run once. */
+export interface HopOutcome {
+  source: string;
+  target: string;
+  length_km: number;
+  qber: number;
+  accepted: boolean;
+  bits: number;
+  reason: string;
+}
+
+/** What one route delivered, and who along it was listening. */
+export interface RouteOutcome {
+  nodes: string[];
+  relays: string[];
+  hops: HopOutcome[];
+  length_km: number;
+  delivered: boolean;
+  bits: number;
+  compromised_relays: string[];
+  /** Whether the adversary holds at least one relay on this route. */
+  observed: boolean;
+}
+
+/** The route set itself, as the backend declares it — drawn before it runs. */
+export interface NetworkRoute {
+  nodes: string[];
+  relays: string[];
+  length_km: number;
+  hops: { source: string; target: string; length_km: number }[];
+}
+
+export interface NetworkGraph {
+  source: string;
+  target: string;
+  relays: string[];
+  /** The property the split strategy depends on: no relay shared by two routes. */
+  disjoint_relays: boolean;
+  routes: NetworkRoute[];
+}
+
+export interface NetworkResult {
+  strategy: NetworkStrategyKind;
+  topology: NetworkTopologyKind;
+  network: NetworkGraph;
+  total_length_km: number;
+  hop_length_km: number;
+  hops_per_route: number;
+  routes: RouteOutcome[];
+  key_bits: number;
+  delivered: boolean;
+  /** Share of the key the adversary can reconstruct, 0 to 1. */
+  leaked_fraction: number;
+  fragments: number;
+  threshold: number;
+  worst_hop_qber: number;
+  reason: string;
+}
+
+export interface NetworkSweepPoint {
+  value: number;
+  key_bits: number;
+  delivered: boolean;
+  leaked_fraction: number;
+  worst_hop_qber: number;
+  total_length_km: number;
+}
+
+export interface NetworkStartedPayload {
+  protocol?: ProtocolKind;
+  strategy?: NetworkStrategyKind;
+  topology?: NetworkTopologyKind;
+  network?: NetworkGraph;
+  hop_length_km?: number;
+  total_length_km?: number;
+  hops_per_route?: number;
+  n_qubits?: number;
+  trials?: number;
+  /** These, when the run is a sweep instead. */
+  axis?: NetworkSweepAxis;
+  values?: number[];
+}
+
+export type NetworkDoneEvent =
+  | { kind: "done"; index: number | null; payload: NetworkResult }
+  | { kind: "done"; index: number | null; payload: { axis: NetworkSweepAxis; points: NetworkSweepPoint[] } };
 
 // ---------------------------------------------------------------------------
 // The service's own settings

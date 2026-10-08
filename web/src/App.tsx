@@ -5,6 +5,7 @@ import Configuration from "./screens/configuration/Configuration";
 import Exploration from "./screens/exploration/Exploration";
 import Comparison from "./screens/comparison/Comparison";
 import Envelope from "./screens/envelope/Envelope";
+import Network from "./screens/network/Network";
 
 /**
  * A route change, softened.
@@ -75,6 +76,14 @@ export default function App() {
         element={
           <Screen>
             <Envelope />
+          </Screen>
+        }
+      />
+      <Route
+        path="/network"
+        element={
+          <Screen>
+            <Network />
           </Screen>
         }
       />

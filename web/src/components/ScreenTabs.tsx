@@ -24,6 +24,7 @@ const TABS = [
   { to: "/explore", label: "Sweep" },
   { to: "/compare", label: "Comparison" },
   { to: "/envelope", label: "Envelope" },
+  { to: "/network", label: "Network" },
 ];
 
 export function ScreenTabs() {
