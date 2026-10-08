@@ -41,7 +41,7 @@ from collections.abc import Callable
 
 from qkd import bb84, e91
 from qkd.actors import Actor, Eavesdropper, Player, Position, Role
-from qkd.attacks import Attack, InterceptResend
+from qkd.attacks import Attack, CompromisedRelay, InterceptResend
 from qkd.channels import AmplitudeDamping, Channel, IdealChannel
 from qkd.settings import (
     AttackConfig,
@@ -49,6 +49,8 @@ from qkd.settings import (
     AttackKind,
     ChannelConfig,
     ChannelKind,
+    StrategyKind,
+    TopologyKind,
 )
 
 ChannelFactory = Callable[[ChannelConfig], Channel]
@@ -118,6 +120,19 @@ def _build_amplitude_damping(config: ChannelConfig) -> Channel:
 @attack(AttackKind.INTERCEPT_RESEND)
 def _build_intercept_resend(config: AttackConfig) -> Attack:
     return InterceptResend(config.fraction)
+
+
+@attack(AttackKind.COMPROMISED_RELAY)
+def _build_compromised_relay(config: AttackConfig) -> Attack:
+    """Ignores the configuration, and the signature is kept anyway.
+
+    The attack has no parameters: a relay reads the whole key it forwards, so
+    there is no fraction to tune and nothing for a configuration to say. The
+    factory still takes one, because the registry's contract is that every
+    factory accepts its slice of the configuration — an exception here would
+    make the lookup special-case this one plugin.
+    """
+    return CompromisedRelay()
 
 
 # ---------------------------------------------------------------------------
@@ -205,12 +220,33 @@ def available_attacks() -> dict[str, list[str]]:
     combinations, rather than letting someone assemble an impossible run and
     discover it when it fails. The threat model reaches the user through this
     dictionary.
+
+    The probe configuration is built with `model_construct`, which skips the
+    model's validators. That is correct here and nowhere else: the validators
+    enforce the pairing between an attack and the position it is declared at,
+    and the whole purpose of this function is to ask each attack which positions
+    those are. Validating the probe would require already knowing the answer,
+    and `compromised_relay` — legal only at a relay — could not be described at
+    all.
     """
     described = {}
     for name, factory in _ATTACKS.items():
-        instance = factory(AttackConfig(kind=AttackKind(name)))
+        instance = factory(AttackConfig.model_construct(kind=AttackKind(name)))
         described[name] = sorted(p.value for p in instance.valid_positions)
     return described
+
+
+def network_options() -> dict[str, list[str]]:
+    """The route shapes and carrying strategies a multi-hop run can ask for.
+
+    Reported next to the protocol wiring rather than inside it, because these
+    are not alternative ways of drawing a protocol: they are what the protocol
+    is embedded in once a route is longer than one hop.
+    """
+    return {
+        "topologies": sorted(t.value for t in TopologyKind),
+        "strategies": sorted(s.value for s in StrategyKind),
+    }
 
 
 def topologies() -> dict:
@@ -244,4 +280,5 @@ def describe() -> dict[str, object]:
         "attacks": available_attacks(),
         "positions": sorted(p.value for p in Position),
         "topologies": topologies(),
+        "network": network_options(),
     }

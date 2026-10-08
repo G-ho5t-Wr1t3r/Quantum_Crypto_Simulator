@@ -30,6 +30,8 @@ key is real and belongs in the report; it simply is not something this code
 draws, and saying so is better than implying otherwise with a duplicate metric.
 """
 
+from collections.abc import Sequence
+
 from qkd.types import Bits
 
 
@@ -311,3 +313,73 @@ def chsh_uncertainty(n_per_setting: int) -> float:
         return upper_bound
     else:
         raise ValueError("Cannot work with negative N")
+
+
+def surviving_key_bits(per_hop_bits: Sequence[int]) -> int:
+    """Length of the key that survives a multi-hop path.
+
+    A relayed key is re-encrypted on every hop, so a hop can only forward as
+    much key as it managed to establish itself. The end-to-end length is
+    therefore the MINIMUM over the hops, not the sum and not the average: the
+    weakest hop sets the ceiling for the whole path, which is the multi-hop
+    restatement of the fact that distance, and not only the adversary, is what
+    destroys a key.
+
+    An empty path yields zero rather than raising. A path with no hops is what a
+    failed route looks like, and a failed route delivers no key.
+
+    Args:
+        per_hop_bits: usable key length established on each hop, in order.
+
+    Returns:
+        Bits available end to end, zero if any hop established nothing.
+    """
+    if not per_hop_bits:
+        return 0
+    return min(per_hop_bits)
+
+
+def key_leakage(observed_fragments: int, total_fragments: int, threshold: int) -> float:
+    """Fraction of the key an adversary holding `observed_fragments` learns.
+
+    WHY THIS IS A STEP AND NOT A SLOPE
+    -----------------------------------
+    The interesting property of splitting a key across disjoint paths is that
+    partial knowledge is worth nothing. Under an all-or-nothing split, each
+    fragment is uniformly distributed and independent of the secret; only the
+    whole set reconstructs it. An adversary one fragment short is in exactly the
+    same position as one holding none.
+
+    So this function returns 1 or 0, never something in between, and that is the
+    result rather than a simplification. It is also what makes the comparison
+    against a single relayed chain legible on a plot: the chain leaks everything
+    as soon as one node falls, the split leaks nothing until the last one does.
+
+    The threshold is a parameter rather than hard-wired to `total_fragments`
+    because the all-or-nothing case is one point on a scale. Demanding every
+    fragment maximises secrecy and minimises availability — one lost fragment
+    costs the key — and stating the threshold explicitly is what lets that
+    trade-off be plotted instead of assumed.
+
+    Args:
+        observed_fragments: how many distinct fragments the adversary holds.
+        total_fragments: how many the key was split into.
+        threshold: how many are needed to reconstruct it.
+
+    Returns:
+        1.0 if the adversary can reconstruct the key, 0.0 otherwise.
+
+    Raises:
+        ValueError: if the threshold cannot be met by the fragments that exist,
+            or if either count is negative.
+    """
+    if total_fragments < 1:
+        raise ValueError(f"a key is split into at least one fragment, got {total_fragments}")
+    if observed_fragments < 0:
+        raise ValueError(f"fragment count cannot be negative, got {observed_fragments}")
+    if not 1 <= threshold <= total_fragments:
+        raise ValueError(
+            f"threshold {threshold} is unreachable with {total_fragments} fragments; "
+            "it must lie between 1 and the number of fragments"
+        )
+    return 1.0 if observed_fragments >= threshold else 0.0

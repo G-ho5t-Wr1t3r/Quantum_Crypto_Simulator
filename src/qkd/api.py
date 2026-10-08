@@ -62,8 +62,16 @@ from qkd.engine import (
     sweep_stream,
 )
 from qkd.engine import run as engine_run
+from qkd.network import NetworkSweepAxis
+from qkd.network import stream as network_stream
+from qkd.network import sweep_stream as network_sweep_stream
 from qkd.registry import UnknownPluginError, describe
-from qkd.settings import SimulationConfig, json_schema
+from qkd.settings import (
+    NetworkSimulationConfig,
+    SimulationConfig,
+    json_schema,
+    network_json_schema,
+)
 
 
 def limits() -> appconfig.Limits:
@@ -181,6 +189,22 @@ class SweepRequest(BaseModel):
 
     config: SimulationConfig
     axis: SweepAxis
+    start: float = Field(ge=0.0)
+    stop: float = Field(ge=0.0)
+    points: int = Field(default=11, ge=2, le=100)
+
+
+class NetworkSweepRequest(BaseModel):
+    """A sweep over a property of the route rather than of the channel.
+
+    Separate from `SweepRequest` because the two carry different configurations
+    and different axes. Merging them would mean a request that could name a
+    channel axis alongside a route, and the invalid half would have to be
+    rejected at run time instead of by the model.
+    """
+
+    config: NetworkSimulationConfig
+    axis: NetworkSweepAxis
     start: float = Field(ge=0.0)
     stop: float = Field(ge=0.0)
     points: int = Field(default=11, ge=2, le=100)
@@ -383,6 +407,71 @@ async def start_sweep(request: SweepRequest) -> dict:
     _register(state)
     _launch(state, produce)
     return {"run_id": state.run_id, "status": state.status.value, "points": len(values)}
+
+
+@app.post("/network/simulate", status_code=202, tags=["network"])
+async def network_simulate(config: NetworkSimulationConfig) -> dict:
+    """Start a multi-hop run and return its identifier.
+
+    Asynchronous without an exception for small configurations, unlike the
+    point-to-point case. A route runs the protocol once per hop, so even a
+    modest configuration is several full simulations: the cheapest multi-hop run
+    costs more than the most expensive one the synchronous endpoint accepts, and
+    offering a fast path here would only offer a timeout.
+    """
+    _refuse_if_busy()
+    try:
+        _validate_upfront(lambda: network_stream(config))
+    except AttackNotAllowedError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except UnknownPluginError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    state = RunState(run_id=str(uuid.uuid4()))
+    _register(state)
+    _launch(state, lambda: network_stream(config))
+    return {"run_id": state.run_id, "status": state.status.value}
+
+
+@app.post("/network/sweep", status_code=202, tags=["network"])
+async def network_sweep(request: NetworkSweepRequest) -> dict:
+    """Start a sweep over a property of the route and return its identifier.
+
+    The long-running case of a long-running case: every point is a whole route,
+    and every hop of it a full simulation. The identifier and the event stream
+    are not a convenience here, they are the only way to watch it.
+    """
+    _refuse_if_busy()
+    values = linspace(request.start, request.stop, request.points)
+
+    def produce():
+        return network_sweep_stream(request.config, request.axis, values)
+
+    try:
+        _validate_upfront(produce)
+    except AttackNotAllowedError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    state = RunState(run_id=str(uuid.uuid4()))
+    _register(state)
+    _launch(state, produce)
+    return {"run_id": state.run_id, "status": state.status.value, "points": len(values)}
+
+
+@app.get("/network/schema", tags=["discovery"])
+def network_schema() -> dict:
+    """The JSON Schema of a multi-hop configuration.
+
+    A second schema beside the point-to-point one, for the same reason there are
+    two models: a form built from this offers a route and a strategy, and does
+    not offer a channel, which in a multi-hop run is derived from the hop length
+    rather than chosen.
+    """
+    return network_json_schema()
 
 
 @app.post("/simulate/sync", tags=["runs"])

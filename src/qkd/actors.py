@@ -64,10 +64,24 @@ class Position(Enum):
     endpoint does not: the attacker at an endpoint already has the data, so
     there is nothing to re-prepare and no error to introduce. QKD detects
     eavesdroppers on the line, not participants who have been compromised.
+
+    A RELAY is the third case, and it is the one the multi-hop extension exists
+    to study. A relay is an endpoint twice over: it terminates the hop behind it
+    and originates the hop ahead, so it legitimately holds the key material of
+    both. It is not on anybody's channel, which is precisely the problem — an
+    adversary who owns a relay reads the key with no interference and therefore
+    no error to betray it, on a line whose QBER stays flawless.
+
+    Keeping it distinct from ENDPOINT rather than reusing it matters for the
+    threat model: an endpoint is one of the two parties who are supposed to know
+    the key, whereas a relay is a third party trusted to forward it. Collapsing
+    the two would make "trusted relay" unsayable, and the whole point of the
+    extension is that this trust is an assumption with a cost.
     """
 
     ENDPOINT = "endpoint"
     CHANNEL = "channel"
+    RELAY = "relay"
 
 
 class Role(Enum):

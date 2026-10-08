@@ -254,3 +254,67 @@ class InterceptResend(Attack):
 
         return attacked
 
+
+class CompromisedRelay(Attack):
+    """The adversary owns a relay node and reads the key it is forwarding.
+
+    WHY IT TOUCHES NO QUBIT
+    ------------------------
+    `intercept` returns the circuit unchanged, and that is the entire finding
+    rather than an unimplemented method. A relay does not need to interfere with
+    anything: it terminated the previous hop and originated the next one, so the
+    key is already in its memory in the clear. There is nothing to measure,
+    nothing to re-prepare, and therefore no disturbance.
+
+    The consequence is the one worth plotting. Intercept-resend pays for its
+    information with a 25% error rate and is caught by the QBER; this attack
+    pays nothing and leaves the QBER exactly where the channel left it. A run
+    under this attack looks pristine on every quantum metric the simulator
+    computes, while the key is fully known. That is not a gap in QKD's security
+    proof — the proof assumes the endpoints are honest, and a trusted relay
+    quietly adds two more endpoints per hop to the set that has to be.
+
+    WHY IT IS ONLY VALID AT A RELAY
+    --------------------------------
+    From the CHANNEL the adversary sees qubits in transit and must disturb them
+    to learn anything, which is intercept-resend and a different attack. From an
+    ENDPOINT it would be one of the two legitimate parties, which is an insider
+    and not a relay problem at all. The attack is defined by standing at a node
+    trusted to forward a key it is not the recipient of, so RELAY is the only
+    position where it means what it says, and the framework refuses it anywhere
+    else through the same `validate_placement` as everything else.
+
+    WHAT IT DOES NOT MODEL
+    -----------------------
+    A passive read, nothing more. A compromised relay could also forward a key
+    of its own choosing, which would break integrity rather than secrecy and
+    would show up as a mismatch at the far end instead of as leakage. That is a
+    separate attack with a separate signature; conflating the two would blur the
+    distinction the comparison rests on.
+    """
+
+    name = "compromised_relay"
+    valid_positions = frozenset({Position.RELAY})
+
+    def intercept(
+        self,
+        circuit: QuantumCircuit,
+        qubit: int,
+        rng: np.random.Generator,
+        journal: list | None = None,
+    ) -> QuantumCircuit:
+        """Forward the qubit untouched, recording that nothing was done to it.
+
+        The journal entry is None on every qubit, by construction and not by
+        omission: None is the vocabulary intercept-resend already uses for a
+        qubit it let through, so an interface reading the attacker's view sees an
+        adversary who never touched the line — which is what happened.
+
+        Returns:
+            A copy of the circuit, unmodified. Copied rather than returned as-is
+            to honour the same no-mutation contract as every other attack.
+        """
+        if journal is not None:
+            journal.append(None)
+        return circuit.copy()
+
